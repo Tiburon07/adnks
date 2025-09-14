@@ -1,81 +1,141 @@
-# adnks - Gestione Eventi e Iscrizioni
+# ADNKS - Sistema di Gestione Eventi e Iscrizioni
 
-Applicazione PHP per la gestione di eventi e iscrizioni, con interfaccia web responsive e database MariaDB/MySQL.
+Applicazione web PHP per la gestione completa di eventi e iscrizioni utenti, con architettura containerizzata Docker e supporto SSL per il dominio `adnks.site`.
 
-## Requisiti
+## 🛠 Stack Tecnologico
 
-- **PHP** (versione 7.4 o superiore) installato in locale
-- **Estensione PDO** abilitata in `php.ini` (`extension=pdo_mysql`)
-- **MariaDB** o **MySQL** (puoi usare Docker, vedi sotto)
-- **Composer** (opzionale, se vuoi gestire dipendenze aggiuntive)
+- **Backend**: PHP 8.2-FPM
+- **Database**: MariaDB 10.11
+- **Web Server**: Nginx (con supporto SSL/HTTPS)
+- **Containerizzazione**: Docker & Docker Compose
+- **SSL**: Let's Encrypt (Certbot con DNS DigitalOcean)
 
-## Installazione
+## 📋 Prerequisiti
 
-1. **Clona il repository**  
-   ```bash
-   git clone https://github.com/Tiburon07/adnks.git
-   cd adnks
-   ```
+- Docker e Docker Compose installati
+- Accesso al DNS DigitalOcean (per certificati SSL)
+- Porta 80, 443 e 3306 disponibili
 
-2. **Configura il database**  
-   - Puoi usare il file `mariadb.yml` per avviare un database MariaDB con Docker Compose:
-     ```bash
-     docker compose -f mariadb.yml up -d
-     ```
-   - Oppure crea manualmente un database e importa lo schema da `sql/eventi_schema_mariadb.sql`.
+## 🚀 Installazione e Avvio
 
-3. **Configura le variabili d'ambiente**  
-   - Copia il file `.env` e personalizza le credenziali di accesso al database se necessario.
-
-4. **Abilita l'estensione PDO in PHP**  
-   - Modifica il file `php.ini` e assicurati che la riga seguente sia decommentata:
-     ```
-     extension=pdo_mysql
-     ```
-
-## Avvio del server
-
-Avvia il server di sviluppo PHP dalla root del progetto:
-
+### 1. Clona il Repository
 ```bash
-php -S localhost:8000
+git clone https://github.com/Tiburon07/adnks.git
+cd adnks
 ```
 
-L'applicazione sarà accessibile su [http://localhost:8000](http://localhost:8000).
+### 2. Configurazione Ambiente
+Modifica il file `src/.env` con le tue credenziali:
+```env
+DB_HOST=mariadb
+DB_PORT=3306
+DB_NAME=app_database
+DB_USER=app_user
+DB_PASSWORD=app_password
+APP_ENV=production
+APP_DEBUG=false
+```
 
-## Funzionalità principali
+### 3. Avvio con Docker Compose
 
-- Creazione, modifica e visualizzazione eventi
-- Iscrizione utenti agli eventi
-- Gestione stato iscrizione (conferma, annulla, check-in)
-- Statistiche e dettagli iscrizioni
-- Interfaccia responsive con Bootstrap
+#### Sviluppo
+```bash
+make up
+```
 
-## Struttura del progetto
+#### Build e Deploy Completo
+```bash
+make build
+```
 
-- `index.php` — Gestione eventi
-- `iscrizione.php` — Form iscrizione evento
-- `visualizza_iscrizioni.php` — Elenco iscrizioni
-- `classes/` — Classi PHP per database e ambiente
-- `sql/` — Script SQL per il database
-- `.env` — Configurazione ambiente (database, debug, ecc.)
+#### Altri Comandi Utili
+```bash
+make down          # Ferma i container
+make down-v         # Ferma i container e rimuove volumi
+make show-logs      # Mostra i log
+```
 
-## Note
+### 4. Accesso all'Applicazione
 
-- Assicurati che la porta 3306 non sia occupata se usi Docker.
-- Per ambiente di produzione, imposta `APP_DEBUG=false` nel file `.env`.
+- **Sviluppo**: http://localhost
+- **Produzione**: https://adnks.site
 
----
+## 🗄 Struttura del Progetto
 
-**Autore:** Tiburon07  
-**Licenza:** MIT
+```
+adnks/
+├── docker-compose.yml          # Orchestrazione servizi Docker
+├── makefile                    # Comandi per gestione container
+├── README.md
+│
+├── nginx/
+│   └── default.conf           # Configurazione Nginx + SSL
+│
+├── php/
+│   ├── Dockerfile             # Container PHP 8.2-FPM
+│   └── php.ini               # Configurazione PHP
+│
+├── mysql/
+│   └── init/                 # Script inizializzazione DB
+│
+├── sql/
+│   └── eventi_schema_mariadb.sql  # Schema database
+│
+└── src/                      # Codice applicazione PHP
+    ├── .env                  # Configurazione ambiente
+    ├── index.php            # Homepage gestione eventi
+    ├── iscrizione.php       # Form iscrizione eventi
+    ├── visualizza_iscrizioni.php
+    ├── visualizza_utenti.php
+    ├── dettagli_utente.php
+    ├── salva_evento.php
+    ├── salva_iscrizione.php
+    ├── update_iscrizione.php
+    ├── update_utente.php
+    └── classes/             # Classi PHP (DB, utility)
+```
 
+## 🌟 Funzionalità Principali
 
-CERTIFICATO SSH 
-sudo docker run -it --rm --name certbot --env-file ~/.config/certbot/certbot.env --volume "/etc/letsencrypt:/etc/letsencrypt" --volume "/var/lib/letsencrypt:/var/lib/letsencrypt" certbot/dns-digitalocean certonly --dns-digitalocean --dns-digitalocean-credentials /etc/letsencrypt/digitalocean.ini -d adnks.site -d *.adnks.site --agree-tos --email t.iordache@outlook.it
+### Gestione Eventi
+- ✅ Creazione, modifica ed eliminazione eventi
+- ✅ Visualizzazione calendario eventi
+- ✅ Gestione dettagli eventi (data, luogo, descrizione)
 
+### Gestione Iscrizioni
+- ✅ Form iscrizione utenti agli eventi
+- ✅ Conferma/Annullamento iscrizioni
+- ✅ Check-in partecipanti
+- ✅ Gestione stati iscrizione
 
-Rinnovo certificato tibadmin
+### Gestione Utenti
+- ✅ Registrazione e gestione profili utenti
+- ✅ Visualizzazione dettagli utente
+- ✅ Aggiornamento informazioni personali
+
+### Statistiche e Report
+- ✅ Dashboard statistiche eventi
+- ✅ Report iscrizioni per evento
+- ✅ Elenco partecipanti
+
+## 🔒 Configurazione SSL
+
+### Generazione Certificato Let's Encrypt
+```bash
+sudo docker run -it --rm --name certbot \
+  --env-file ~/.config/certbot/certbot.env \
+  --volume "/etc/letsencrypt:/etc/letsencrypt" \
+  --volume "/var/lib/letsencrypt:/var/lib/letsencrypt" \
+  certbot/dns-digitalocean certonly \
+  --dns-digitalocean \
+  --dns-digitalocean-credentials /etc/letsencrypt/digitalocean.ini \
+  -d adnks.site -d "*.adnks.site" \
+  --agree-tos \
+  --email t.iordache@outlook.it
+```
+
+### Rinnovo Certificato
+```bash
 sudo docker run -it --rm --name certbot \
   --env-file ~/.config/certbot/certbot.env \
   --volume "/etc/letsencrypt:/etc/letsencrypt" \
@@ -87,3 +147,80 @@ sudo docker run -it --rm --name certbot \
   --agree-tos \
   --email t.iordache@outlook.it \
   --force-renewal
+```
+
+## 🧪 Testing e Debug
+
+### Verifica Configurazione PHP
+Visita: http://localhost/phpinfo.php (solo in sviluppo)
+
+### Log dei Container
+```bash
+make show-logs
+```
+
+### Accesso al Database
+```bash
+docker exec -it mariadb_container mysql -u root -p
+```
+
+## 📦 Servizi Docker
+
+| Servizio | Porta | Descrizione |
+|----------|-------|-------------|
+| nginx | 80, 443 | Web server con SSL |
+| php | 9000 | PHP-FPM |
+| mariadb | 3306 | Database MariaDB |
+
+## ⚙️ Configurazioni di Produzione
+
+### Variabili Ambiente (.env)
+```env
+APP_ENV=production
+APP_DEBUG=false
+DB_HOST=mariadb
+DB_PORT=3306
+```
+
+### Nginx
+- Configurazione SSL automatica per `adnks.site`
+- Cache statica per asset (1 anno)
+- Ottimizzazioni FastCGI per PHP
+
+### PHP
+- PHP 8.2 con estensioni: PDO, MySQL, GD, Zip, BCMath
+- Memory limit e timeout ottimizzati
+- OPcache abilitato in produzione
+
+## 🔧 Troubleshooting
+
+### Container non si avvia
+```bash
+docker compose logs [nome-servizio]
+```
+
+### Database non accessibile
+Verifica che la porta 3306 non sia occupata:
+```bash
+sudo netstat -tulpn | grep 3306
+```
+
+### Problemi SSL
+Verifica i certificati Let's Encrypt:
+```bash
+sudo certbot certificates
+```
+
+## 👤 Autore
+
+**Tiburon07**
+📧 t.iordache@outlook.it
+🌐 https://adnks.site
+
+## 📄 Licenza
+
+MIT License - vedi file LICENSE per dettagli.
+
+---
+
+*Ultimo aggiornamento: Settembre 2025*
