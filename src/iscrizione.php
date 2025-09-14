@@ -16,6 +16,8 @@ $nome = isset($_SESSION['form_data']['nome']) ? $_SESSION['form_data']['nome'] :
 $cognome = isset($_SESSION['form_data']['cognome']) ? $_SESSION['form_data']['cognome'] : '';
 $email = isset($_SESSION['form_data']['email']) ? $_SESSION['form_data']['email'] : '';
 $telefono = isset($_SESSION['form_data']['telefono']) ? $_SESSION['form_data']['telefono'] : '';
+$ruolo = isset($_SESSION['form_data']['ruolo']) ? $_SESSION['form_data']['ruolo'] : '';
+$azienda = isset($_SESSION['form_data']['azienda']) ? $_SESSION['form_data']['azienda'] : '';
 $evento_id = isset($_SESSION['form_data']['evento_id']) ? $_SESSION['form_data']['evento_id'] : '';
 $note = isset($_SESSION['form_data']['note']) ? $_SESSION['form_data']['note'] : '';
 
@@ -26,7 +28,7 @@ unset($_SESSION['form_data']);
 $eventi = [];
 try {
     $pdo = getDB();
-    $sql = "SELECT id, nome, dataEvento FROM Eventi WHERE dataEvento > NOW() ORDER BY dataEvento ASC";
+    $sql = "SELECT ID, nome, dataEvento FROM Eventi WHERE dataEvento > NOW() AND archivedAt IS NULL AND deletedAt IS NULL ORDER BY dataEvento ASC";
     $stmt = $pdo->query($sql);
     $eventi = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -80,8 +82,8 @@ try {
                                 <select class="form-select" id="evento_id" name="evento_id" required>
                                     <option value="">Seleziona un evento</option>
                                     <?php foreach ($eventi as $evento): ?>
-                                        <option value="<?= $evento['id'] ?>" <?= $evento_id == $evento['id'] ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($evento['nome']) ?> - 
+                                        <option value="<?= $evento['ID'] ?>" <?= $evento_id == $evento['ID'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($evento['nome']) ?> -
                                             <?= date('d/m/Y H:i', strtotime($evento['dataEvento'])) ?>
                                         </option>
                                     <?php endforeach; ?>
@@ -166,13 +168,13 @@ try {
                                     <i class="bi bi-phone me-1"></i>
                                     Telefono
                                 </label>
-                                <input 
-                                    type="tel" 
-                                    class="form-control" 
-                                    id="telefono" 
-                                    name="telefono" 
+                                <input
+                                    type="tel"
+                                    class="form-control"
+                                    id="telefono"
+                                    name="telefono"
                                     value="<?= htmlspecialchars($telefono) ?>"
-                                    maxlength="20"
+                                    maxlength="30"
                                     placeholder="Es: 123 456 7890"
                                     pattern="[0-9\s\+\-\(\)]+"
                                 >
@@ -182,6 +184,48 @@ try {
                                 <div class="form-text">
                                     <i class="bi bi-info-circle me-1"></i>
                                     Campo opzionale - solo numeri, spazi, +, -, (, )
+                                </div>
+                            </div>
+
+                            <!-- Ruolo -->
+                            <div class="mb-3">
+                                <label for="ruolo" class="form-label">
+                                    <i class="bi bi-briefcase me-1"></i>
+                                    Ruolo/Posizione
+                                </label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    id="ruolo"
+                                    name="ruolo"
+                                    value="<?= htmlspecialchars($ruolo) ?>"
+                                    maxlength="100"
+                                    placeholder="Es: Manager, Sviluppatore, Consulente"
+                                >
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Campo opzionale
+                                </div>
+                            </div>
+
+                            <!-- Azienda -->
+                            <div class="mb-3">
+                                <label for="azienda" class="form-label">
+                                    <i class="bi bi-building me-1"></i>
+                                    Azienda *
+                                </label>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    id="azienda"
+                                    name="azienda"
+                                    value="<?= htmlspecialchars($azienda) ?>"
+                                    required
+                                    maxlength="255"
+                                    placeholder="Nome dell'azienda di appartenenza"
+                                >
+                                <div class="invalid-feedback">
+                                    L'azienda è obbligatoria (max 255 caratteri).
                                 </div>
                             </div>
 

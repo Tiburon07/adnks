@@ -69,3 +69,21 @@ L'applicazione sarà accessibile su [http://localhost:8000](http://localhost:800
 
 **Autore:** Tiburon07  
 **Licenza:** MIT
+
+
+CERTIFICATO SSH 
+sudo docker run -it --rm --name certbot --env-file ~/.config/certbot/certbot.env --volume "/etc/letsencrypt:/etc/letsencrypt" --volume "/var/lib/letsencrypt:/var/lib/letsencrypt" certbot/dns-digitalocean certonly --dns-digitalocean --dns-digitalocean-credentials /etc/letsencrypt/digitalocean.ini -d adnks.site -d *.adnks.site --agree-tos --email t.iordache@outlook.it
+
+
+Rinnovo certificato tibadmin
+sudo docker run -it --rm --name certbot \
+  --env-file ~/.config/certbot/certbot.env \
+  --volume "/etc/letsencrypt:/etc/letsencrypt" \
+  --volume "/var/lib/letsencrypt:/var/lib/letsencrypt" \
+  certbot/dns-digitalocean certonly \
+  --dns-digitalocean \
+  --dns-digitalocean-credentials /etc/letsencrypt/digitalocean.ini \
+  -d adnks.site -d "*.adnks.site" \
+  --agree-tos \
+  --email t.iordache@outlook.it \
+  --force-renewal

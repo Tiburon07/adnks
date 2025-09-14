@@ -50,6 +50,10 @@ unset($_SESSION['form_data']);
                         <i class="bi bi-people me-1"></i>
                         Visualizza Iscrizioni
                     </a>
+                    <a href="visualizza_utenti.php" class="btn btn-outline-secondary">
+                        <i class="bi bi-person-lines-fill me-1"></i>
+                        Gestione Utenti
+                    </a>
                 </div>
             </div>
         </div>

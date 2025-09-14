@@ -50,25 +50,25 @@ function validateFormData($data) {
  * Funzione per salvare l'evento nel database
  */
 function saveEvento($pdo, $data) {
-    $sql = "INSERT INTO Eventi (nome, dataEvento, categoria, tipo, createdAt, updatedAt) 
-            VALUES (:nome, :dataEvento, :categoria, :tipo, NOW(), NOW())";
-    
+    $sql = "INSERT INTO Eventi (nome, dataEvento, categoria, tipo, createdAt, updatedAt)
+            VALUES (:nome, :dataEvento, :categoria, :tipo, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+
     try {
         $stmt = $pdo->prepare($sql);
-        
+
         // Conversione della data dal formato HTML al formato MySQL
         $dataEvento = DateTime::createFromFormat('Y-m-d\TH:i', $data['dataEvento']);
         $dataEventoMySQL = $dataEvento->format('Y-m-d H:i:s');
-        
+
         $params = [
             ':nome' => trim($data['nome']),
             ':dataEvento' => $dataEventoMySQL,
             ':categoria' => trim($data['categoria']),
             ':tipo' => $data['tipo']
         ];
-        
+
         $stmt->execute($params);
-        
+
         return $pdo->lastInsertId();
     } catch (PDOException $e) {
         error_log("Errore inserimento evento: " . $e->getMessage());

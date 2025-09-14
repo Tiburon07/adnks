@@ -109,6 +109,10 @@ function getCheckinBadge($checkin) {
                         <i class="bi bi-calendar-event me-1"></i>
                         Gestione Eventi
                     </a>
+                    <a href="visualizza_utenti.php" class="btn btn-outline-secondary">
+                        <i class="bi bi-person-lines-fill me-1"></i>
+                        Gestione Utenti
+                    </a>
                     <a href="iscrizione.php" class="btn btn-success">
                         <i class="bi bi-person-plus me-1"></i>
                         Nuova Iscrizione
