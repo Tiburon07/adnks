@@ -80,7 +80,7 @@ function verificaEvento($pdo, $evento_id) {
  * Funzione per verificare se l'utente è già iscritto all'evento
  */
 function verificaIscrizioneEsistente($pdo, $evento_id, $email) {
-    $sql = "SELECT id FROM Iscrizioni WHERE evento_id = :evento_id AND email = :email";
+    $sql = "SELECT id FROM Iscrizione_Eventi WHERE idEvento = :evento_id AND idUtente = :email";
     
     try {
         $stmt = $pdo->prepare($sql);
@@ -99,19 +99,18 @@ function verificaIscrizioneEsistente($pdo, $evento_id, $email) {
  * Funzione per salvare l'iscrizione nel database
  */
 function saveIscrizione($pdo, $data) {
-    $sql = "INSERT INTO Iscrizioni (evento_id, nome, cognome, email, telefono, note, dataIscrizione, createdAt, updatedAt) 
-            VALUES (:evento_id, :nome, :cognome, :email, :telefono, :note, NOW(), NOW(), NOW())";
+
+    $sql = "INSERT INTO Iscrizione_Eventi (idEvento, IDUtente, checkin, dataIscrizione, createdAt, updatedAt) 
+            VALUES (:evento_id, :id_utente, :checkin, NOW(), NOW(), NOW())";
     
     try {
         $stmt = $pdo->prepare($sql);
-        
+        $idUtente = 1;
+        $checkin = 'virtuale';
         $params = [
             ':evento_id' => (int)$data['evento_id'],
-            ':nome' => trim($data['nome']),
-            ':cognome' => trim($data['cognome']),
-            ':email' => strtolower(trim($data['email'])),
-            ':telefono' => !empty($data['telefono']) ? trim($data['telefono']) : null,
-            ':note' => !empty($data['note']) ? trim($data['note']) : null
+            ':id_utente' => $idUtente,
+            ':checkin' => $checkin
         ];
         
         $stmt->execute($params);
@@ -146,7 +145,7 @@ try {
     
     // Validazione dati
     $errors = validateIscrizioneData($formData);
-    
+
     if (!empty($errors)) {
         $_SESSION['error'] = implode('<br>', $errors);
         header('Location: iscrizione.php');
@@ -163,13 +162,15 @@ try {
         header('Location: iscrizione.php');
         exit;
     }
-    
+
+    // TODO: Abilitare questa verifica una volta che la tabella utenti è implementata
     // Verifica se l'utente è già iscritto a questo evento
-    if (verificaIscrizioneEsistente($pdo, $formData['evento_id'], $formData['email'])) {
-        $_SESSION['error'] = "Sei già iscritto a questo evento con questa email.";
-        header('Location: iscrizione.php');
-        exit;
-    }
+    //if (verificaIscrizioneEsistente($pdo, $formData['evento_id'], $formData['email'])) {
+    //    $_SESSION['error'] = "Sei già iscritto a questo evento con questa email.";
+    //    header('Location: iscrizione.php');
+    //    exit;
+    //}
+    //var_dump('verifica iscrizione evento'); die();
     
     // Salvataggio iscrizione
     $iscrizioneId = saveIscrizione($pdo, $formData);
