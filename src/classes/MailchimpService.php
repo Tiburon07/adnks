@@ -462,6 +462,133 @@ class MailchimpService
             return false;
         }
     }
+
+    /**
+    * Ottiene informazioni dettagliate su un membro della lista
+    */
+    public function getMemberInfo($email) {
+        try {
+            $subscriberHash = $this->getEmailHash($email);
+            $endpoint = "lists/{$this->listId}/members/{$subscriberHash}";
+            
+            $response = $this->makeApiCall('GET', $endpoint);
+            
+            return $response;
+            
+        } catch (Exception $e) {
+            error_log("Errore getMemberInfo per {$email}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Ottiene le impostazioni della lista
+     */
+    public function getListSettings() {
+        try {
+            $endpoint = "lists/{$this->listId}";
+            
+            $response = $this->makeApiCall('GET', $endpoint);
+            
+            return [
+                'double_optin' => $response['double_optin'] ?? false,
+                'email_type_option' => $response['email_type_option'] ?? false,
+                'default_from_name' => $response['campaign_defaults']['from_name'] ?? '',
+                'default_from_email' => $response['campaign_defaults']['from_email'] ?? '',
+                'default_subject' => $response['campaign_defaults']['subject'] ?? '',
+                'permission_reminder' => $response['permission_reminder'] ?? '',
+                'use_archive_bar' => $response['use_archive_bar'] ?? false,
+                'notify_on_subscribe' => $response['notify_on_subscribe'] ?? '',
+                'notify_on_unsubscribe' => $response['notify_on_unsubscribe'] ?? ''
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Errore getListSettings: " . $e->getMessage());
+            throw $e;
+        }
+}
+
+    /**
+     * Controlla l'attività recente di un membro
+     */
+    public function getMemberActivity($email, $count = 10) {
+        try {
+            $subscriberHash = $this->getEmailHash($email);
+            $endpoint = "lists/{$this->listId}/members/{$subscriberHash}/activity";
+            
+            $params = ['count' => $count];
+            $response = $this->makeApiCall('GET', $endpoint, $params);
+            
+            return $response['activity'] ?? [];
+            
+        } catch (Exception $e) {
+            error_log("Errore getMemberActivity per {$email}: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Verifica se un'email è nella lista di bounce/complaint
+     */
+    public function checkEmailStatus($email) {
+        try {
+            // Prima prova a ottenere info membro
+            $memberInfo = $this->getMemberInfo($email);
+            
+            if ($memberInfo) {
+                return [
+                    'exists' => true,
+                    'status' => $memberInfo['status'],
+                    'email_type' => $memberInfo['email_type'],
+                    'timestamp_opt' => $memberInfo['timestamp_opt'] ?? null,
+                    'last_changed' => $memberInfo['last_changed'] ?? null,
+                    'unsubscribe_reason' => $memberInfo['unsubscribe_reason'] ?? null
+                ];
+            }
+            
+            return ['exists' => false];
+            
+        } catch (Exception $e) {
+            // Se otteniamo un 404, il membro non esiste
+            if (strpos($e->getMessage(), '404') !== false) {
+                return ['exists' => false];
+            }
+            
+            error_log("Errore checkEmailStatus per {$email}: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Re-iscrive un membro che era stato rimosso/unsubscribed
+     */
+    public function resubscribeMember($email, $mergeFields = []) {
+        try {
+            $subscriberHash = $this->getEmailHash($email);
+            $endpoint = "lists/{$this->listId}/members/{$subscriberHash}";
+            
+            $data = [
+                'email_address' => $email,
+                'status' => 'subscribed', // Forza lo stato a subscribed
+                'merge_fields' => $mergeFields
+            ];
+            
+            $response = $this->makeRequest('PATCH', $endpoint, [], $data);
+            
+            return [
+                'success' => true,
+                'status' => $response['status'],
+                'id' => $response['id']
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Errore resubscribeMember per {$email}: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
 }
 
 /**
