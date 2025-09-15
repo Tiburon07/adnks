@@ -98,6 +98,11 @@ class MailchimpService
         $data = [
             'email_address' => strtolower($email),
             'status_if_new' => 'pending', // double opt-in se è un nuovo iscritto
+            'merge_fields' => [
+                'FNAME' => $nome,
+                'LNAME' => $cognome,
+                'COMPANY' => $azienda
+            ]
         ];
     
         // Prova prima senza merge fields
@@ -148,8 +153,8 @@ class MailchimpService
                 'message' => 'Errore durante la gestione della mailing list'
             ];
         }
+
         */
-    
         // Tags per evento e data (decommentare se i campi esistono)
         /*
         $tags = [];
@@ -162,8 +167,8 @@ class MailchimpService
         if (!empty($tags)) {
             $data['tags'] = $tags;
         }
+        
         */
-    
         try {
             // PUT = insert or update (upsert)
             $response = $this->makeApiCall("/lists/{$this->listId}/members/{$subscriberHash}", 'PUT', $data);
@@ -190,6 +195,7 @@ class MailchimpService
                 'message' => 'Errore durante la gestione della mailing list'
             ];
         }
+       
     }
     
     // Metodo helper per sanitizzare i nomi dei tag
