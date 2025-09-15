@@ -11,14 +11,17 @@ $error_message = '';
 try {
     $pdo = getDB();
     
-    // Query per recuperare tutte le iscrizioni con dati utente e evento
+    // Query per recuperare tutte le iscrizioni con dati utente e evento + Mailchimp
     $sql = "
-        SELECT 
+        SELECT
             ie.ID,
             ie.dataIscrizione,
             ie.checkin,
             ie.status,
             ie.cancelledAt,
+            ie.mailchimp_id,
+            ie.mailchimp_status,
+            ie.mailchimp_synced_at,
             u.nome AS utente_nome,
             u.cognome AS utente_cognome,
             u.email AS utente_email,
@@ -61,13 +64,31 @@ try {
  */
 function getStatusBadge($status) {
     $badges = [
-        'pending' => '<span class="badge bg-warning">In Attesa</span>',
-        'confirmed' => '<span class="badge bg-success">Confermata</span>',
-        'cancelled' => '<span class="badge bg-danger">Annullata</span>',
-        'bounced' => '<span class="badge bg-secondary">Respinta</span>'
+        'pending' => '<span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>In Attesa Conferma</span>',
+        'confirmed' => '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Confermata</span>',
+        'cancelled' => '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Annullata</span>',
+        'bounced' => '<span class="badge bg-secondary"><i class="bi bi-envelope-x me-1"></i>Email Respinta</span>'
     ];
-    
+
     return $badges[$status] ?? '<span class="badge bg-light text-dark">Sconosciuto</span>';
+}
+
+/**
+ * Funzione helper per il badge dello status Mailchimp
+ */
+function getMailchimpStatusBadge($mailchimpStatus) {
+    if (empty($mailchimpStatus)) {
+        return '<span class="badge bg-light text-muted"><i class="bi bi-dash"></i></span>';
+    }
+
+    $badges = [
+        'pending' => '<span class="badge bg-warning text-dark"><i class="bi bi-envelope-paper me-1"></i>Email Inviata</span>',
+        'subscribed' => '<span class="badge bg-success"><i class="bi bi-envelope-check me-1"></i>Iscritto</span>',
+        'unsubscribed' => '<span class="badge bg-danger"><i class="bi bi-envelope-dash me-1"></i>Disiscritto</span>',
+        'cleaned' => '<span class="badge bg-secondary"><i class="bi bi-envelope-exclamation me-1"></i>Email Pulita</span>'
+    ];
+
+    return $badges[$mailchimpStatus] ?? '<span class="badge bg-light text-dark">' . htmlspecialchars($mailchimpStatus) . '</span>';
 }
 
 /**
@@ -194,6 +215,7 @@ function getCheckinBadge($checkin) {
                                     <th>Data Evento</th>
                                     <th>Data Iscrizione</th>
                                     <th>Status</th>
+                                    <th>Mailchimp</th>
                                     <th>Check-in</th>
                                     <th class="text-center">Azioni</th>
                                 </tr>
@@ -267,6 +289,23 @@ function getCheckinBadge($checkin) {
                                                 <br>
                                                 <small class="text-muted">
                                                     Annullata il <?= date('d/m/Y H:i', strtotime($iscrizione['cancelledAt'])) ?>
+                                                </small>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div>
+                                                <?= getMailchimpStatusBadge($iscrizione['mailchimp_status']) ?>
+                                            </div>
+                                            <?php if (!empty($iscrizione['mailchimp_synced_at'])): ?>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-clock me-1"></i>
+                                                    <?= date('d/m H:i', strtotime($iscrizione['mailchimp_synced_at'])) ?>
+                                                </small>
+                                            <?php endif; ?>
+                                            <?php if (!empty($iscrizione['mailchimp_id'])): ?>
+                                                <br>
+                                                <small class="text-muted font-monospace">
+                                                    ID: <?= substr($iscrizione['mailchimp_id'], 0, 8) ?>...
                                                 </small>
                                             <?php endif; ?>
                                         </td>

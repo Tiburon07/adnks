@@ -3,6 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/classes/Database.php';
+require_once __DIR__ . '/classes/MailchimpService.php';
 
 /**
  * Funzione per validare i dati del form di iscrizione
@@ -169,14 +170,14 @@ function verificaIscrizioneEsistente($pdo, $evento_id, $utente_id) {
 }
 
 /**
- * Funzione per salvare l'iscrizione nel database
+ * Funzione per salvare l'iscrizione nel database con integrazione Mailchimp
  */
-function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo) {
+function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $userData) {
     // Determina il tipo di checkin in base al tipo di evento
     $checkin = ($evento_tipo === 'virtuale') ? 'virtuale' : 'NA';
 
-    $sql = "INSERT INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, createdAt, updatedAt)
-            VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+    $sql = "INSERT INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
+            VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
 
     try {
         $stmt = $pdo->prepare($sql);
@@ -187,8 +188,79 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo) {
         ];
 
         $stmt->execute($params);
+        $iscrizioneId = $pdo->lastInsertId();
 
-        return $pdo->lastInsertId();
+        // Integrazione Mailchimp - Invio con double opt-in
+        try {
+            $mailchimp = new MailchimpService();
+            $mailchimpResult = $mailchimp->addSubscriber(
+                $userData['email'],
+                $userData['nome'],
+                $userData['cognome'],
+                $userData['azienda'],
+                $evento['nome'],
+                $evento['dataEvento']
+            );
+
+            if ($mailchimpResult['success']) {
+                // Aggiorna record con dati Mailchimp
+                $updateSql = "UPDATE Iscrizione_Eventi
+                             SET mailchimp_id = :mailchimp_id,
+                                 mailchimp_email_hash = :email_hash,
+                                 mailchimp_synced_at = CURRENT_TIMESTAMP
+                             WHERE ID = :iscrizione_id";
+
+                $updateStmt = $pdo->prepare($updateSql);
+                $updateStmt->execute([
+                    ':mailchimp_id' => $mailchimpResult['mailchimp_id'],
+                    ':email_hash' => $mailchimpResult['email_hash'],
+                    ':iscrizione_id' => $iscrizioneId
+                ]);
+
+                // Log dell'operazione Mailchimp
+                $logSql = "INSERT INTO Iscrizione_Eventi_Log
+                          (idIscrizione, oldStatus, newStatus, source, note, changedAt)
+                          VALUES (:id, NULL, 'pending', 'mailchimp', :note, CURRENT_TIMESTAMP)";
+
+                $logStmt = $pdo->prepare($logSql);
+                $logStmt->execute([
+                    ':id' => $iscrizioneId,
+                    ':note' => 'Iscrizione inviata a Mailchimp per double opt-in: ' . $mailchimpResult['message']
+                ]);
+
+                error_log("Mailchimp integration success per iscrizione {$iscrizioneId}: " . $mailchimpResult['message']);
+            } else {
+                // Log errore Mailchimp ma non bloccare l'iscrizione
+                error_log("Mailchimp integration failed per iscrizione {$iscrizioneId}: " . $mailchimpResult['error']);
+
+                $logSql = "INSERT INTO Iscrizione_Eventi_Log
+                          (idIscrizione, oldStatus, newStatus, source, note, changedAt)
+                          VALUES (:id, NULL, 'pending', 'mailchimp_error', :note, CURRENT_TIMESTAMP)";
+
+                $logStmt = $pdo->prepare($logSql);
+                $logStmt->execute([
+                    ':id' => $iscrizioneId,
+                    ':note' => 'Errore integrazione Mailchimp: ' . $mailchimpResult['error']
+                ]);
+            }
+
+        } catch (Exception $mailchimpException) {
+            // Log errore ma non bloccare l'iscrizione
+            error_log("Errore Mailchimp integration: " . $mailchimpException->getMessage());
+
+            $logSql = "INSERT INTO Iscrizione_Eventi_Log
+                      (idIscrizione, oldStatus, newStatus, source, note, changedAt)
+                      VALUES (:id, NULL, 'pending', 'mailchimp_exception', :note, CURRENT_TIMESTAMP)";
+
+            $logStmt = $pdo->prepare($logSql);
+            $logStmt->execute([
+                ':id' => $iscrizioneId,
+                ':note' => 'Eccezione Mailchimp: ' . $mailchimpException->getMessage()
+            ]);
+        }
+
+        return $iscrizioneId;
+
     } catch (PDOException $e) {
         error_log("Errore inserimento iscrizione: " . $e->getMessage());
         throw new Exception("Errore durante il salvataggio dell'iscrizione. Riprova più tardi.");
@@ -253,8 +325,8 @@ try {
             exit;
         }
 
-        // Salvataggio iscrizione
-        $iscrizioneId = saveIscrizione($pdo, $formData['evento_id'], $utenteId, $evento['tipo']);
+        // Salvataggio iscrizione con integrazione Mailchimp
+        $iscrizioneId = saveIscrizione($pdo, $formData['evento_id'], $utenteId, $evento['tipo'], $evento, $formData);
 
         // Commit della transazione
         $pdo->commit();
@@ -267,7 +339,9 @@ try {
     // Successo - pulisci i dati del form dalla sessione
     unset($_SESSION['form_data']);
     $_SESSION['success'] = "Iscrizione completata con successo all'evento '{$evento['nome']}'! " .
-                          "Numero iscrizione: {$iscrizioneId}";
+                          "Numero iscrizione: {$iscrizioneId}<br>" .
+                          "<strong>Importante:</strong> Controlla la tua email per confermare la partecipazione. " .
+                          "La tua iscrizione sarà attiva solo dopo la conferma via email.";
 
     header('Location: iscrizione.php');
     exit;
