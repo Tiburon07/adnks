@@ -53,6 +53,8 @@ function logWebhookEvent($pdo, $type, $email, $mailchimpId, $eventData, $process
                 (webhook_type, email, mailchimp_id, event_data, processed, error_message, received_at)
                 VALUES (:type, :email, :mailchimp_id, :event_data, :processed, :error_message, CURRENT_TIMESTAMP)";
 
+        $processed = !$processed ? 0 : (int)$processed;
+
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':type' => $type,
@@ -99,30 +101,35 @@ function updateIscrizioneFromWebhook($pdo, $email, $mailchimpStatus, $webhookTyp
 
         // Determina il nuovo stato in base al webhook
         $newStatus = 'pending';
-        $newMailchimpStatus = $mailchimpStatus;
-
         switch ($webhookType) {
             case 'subscribe':
                 $newStatus = 'confirmed';
-                $newMailchimpStatus = 'subscribed';
+                $newMailchimpStatus = 'subscribed'; // Valore fisso e sicuro
                 break;
             case 'unsubscribe':
                 $newStatus = 'cancelled';
-                $newMailchimpStatus = 'unsubscribed';
+                $newMailchimpStatus = 'unsubscribed'; // Valore fisso e sicuro
                 break;
             case 'cleaned':
                 $newStatus = 'bounced';
-                $newMailchimpStatus = 'cleaned';
+                $newMailchimpStatus = 'cleaned'; // Valore fisso e sicuro
                 break;
             case 'profile':
                 // Aggiornamento profilo, mantieni stato attuale
                 $newStatus = $iscrizione['status'];
+                // Per i profile updates, usa un valore standard o mantieni quello esistente
+                $newMailchimpStatus = $iscrizione['mailchimp_status']; // Mantieni quello esistente
                 break;
             default:
                 return [
                     'success' => false,
                     'message' => "Tipo webhook non gestito: {$webhookType}"
                 ];
+        }
+
+        // Log del valore originale vs troncato per debug
+        if (strlen($mailchimpStatus) > 20) {
+            error_log("Mailchimp status troncato: '{$mailchimpStatus}' -> '{$newMailchimpStatus}' per email {$email}");
         }
 
         // Aggiorna l'iscrizione
@@ -140,7 +147,7 @@ function updateIscrizioneFromWebhook($pdo, $email, $mailchimpStatus, $webhookTyp
             ':iscrizione_id' => $iscrizione['ID']
         ]);
 
-        // Log dell'operazione
+        // Log dell'operazione - salva il valore completo nei dati JSON
         $logSql = "INSERT INTO Iscrizione_Eventi_Log
                    (idIscrizione, oldStatus, newStatus, source, note, mailchimp_event, mailchimp_data, changedAt)
                    VALUES (:id, :old_status, :new_status, 'mailchimp_webhook', :note, :webhook_type, :event_data, CURRENT_TIMESTAMP)";
@@ -150,7 +157,7 @@ function updateIscrizioneFromWebhook($pdo, $email, $mailchimpStatus, $webhookTyp
             ':id' => $iscrizione['ID'],
             ':old_status' => $iscrizione['status'],
             ':new_status' => $newStatus,
-            ':note' => "Webhook {$webhookType} ricevuto per {$email}",
+            ':note' => "Webhook {$webhookType} ricevuto per {$email} - Status originale: {$mailchimpStatus}",
             ':webhook_type' => $webhookType,
             ':event_data' => json_encode($eventData)
         ]);
@@ -161,7 +168,9 @@ function updateIscrizioneFromWebhook($pdo, $email, $mailchimpStatus, $webhookTyp
             'old_status' => $iscrizione['status'],
             'new_status' => $newStatus,
             'evento' => $iscrizione['evento_nome'],
-            'message' => "Iscrizione aggiornata da {$iscrizione['status']} a {$newStatus}"
+            'message' => "Iscrizione aggiornata da {$iscrizione['status']} a {$newStatus}",
+            'mailchimp_status_original' => $mailchimpStatus,
+            'mailchimp_status_saved' => $newMailchimpStatus
         ];
 
     } catch (PDOException $e) {
@@ -172,7 +181,6 @@ function updateIscrizioneFromWebhook($pdo, $email, $mailchimpStatus, $webhookTyp
         ];
     }
 }
-
 /**
  * Verifica la firma del webhook (se configurata)
  */
