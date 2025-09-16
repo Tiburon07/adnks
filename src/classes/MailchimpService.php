@@ -472,26 +472,66 @@ class MailchimpService
         try {
             $subscriberHash = $this->getEmailHash($email);
             $endpoint = "lists/{$this->listId}/members/{$subscriberHash}";
-            
+
             $data = [
                 'email_address' => $email,
                 'status' => 'subscribed', // Forza lo stato a subscribed
                 'merge_fields' => $mergeFields
             ];
-            
+
             $response = $this->makeRequest('PATCH', $endpoint, [], $data);
-            
+
             return [
                 'success' => true,
                 'status' => $response['status'],
                 'id' => $response['id']
             ];
-            
+
         } catch (Exception $e) {
             error_log("Errore resubscribeMember per {$email}: " . $e->getMessage());
             return [
                 'success' => false,
                 'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Recupera tutti i membri della lista
+     */
+    public function getAllMembers($count = 1000, $offset = 0, $status = null) {
+        try {
+            $params = [
+                'count' => $count,
+                'offset' => $offset
+            ];
+
+            if ($status) {
+                $params['status'] = $status;
+            }
+
+            $queryString = http_build_query($params);
+            $endpoint = "/lists/{$this->listId}/members?" . $queryString;
+
+            $response = $this->makeApiCall($endpoint, 'GET');
+
+            return [
+                'success' => true,
+                'members' => $response['members'] ?? [],
+                'total_items' => $response['total_items'] ?? 0,
+                'count' => count($response['members'] ?? []),
+                'offset' => $offset
+            ];
+
+        } catch (Exception $e) {
+            error_log("Errore getAllMembers: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'members' => [],
+                'total_items' => 0,
+                'count' => 0,
+                'offset' => $offset
             ];
         }
     }
