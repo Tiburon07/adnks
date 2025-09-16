@@ -105,56 +105,6 @@ class MailchimpService
             ]
         ];
     
-        // Prova prima senza merge fields
-        /*
-        try {
-            $response = $this->makeApiCall("/lists/{$this->listId}/members/{$subscriberHash}", 'PUT', $data);
-            
-            // Se ha successo, prova ad aggiornare con i merge fields
-            if (!empty($nome) || !empty($cognome)) {
-                $updateData = [
-                    'merge_fields' => []
-                ];
-                
-                if (!empty($nome)) {
-                    $updateData['merge_fields']['FNAME'] = $nome;
-                }
-                
-                if (!empty($cognome)) {
-                    $updateData['merge_fields']['LNAME'] = $cognome;
-                }
-                
-                // Tentativo di aggiornamento con merge fields
-                try {
-                    $this->makeApiCall("/lists/{$this->listId}/members/{$subscriberHash}", 'PATCH', $updateData);
-                    error_log("Merge fields aggiornati con successo per: " . $email);
-                } catch (Exception $e) {
-                    error_log("Impossibile aggiornare merge fields per {$email}: " . $e->getMessage());
-                    // Non è un errore fatale, l'email è comunque stata aggiunta
-                }
-            }
-    
-            return [
-                'success' => true,
-                'mailchimp_id' => $response['id'] ?? null,
-                'email_hash' => $subscriberHash,
-                'status' => $response['status'] ?? 'pending',
-                'message' => 'Subscriber aggiunto/aggiornato con successo.'
-            ];
-            
-        } catch (Exception $e) {
-            // Se fallisce anche la versione base, c'è un problema più serio
-            error_log("Errore gestione subscriber Mailchimp: " . $e->getMessage());
-            error_log("Dati inviati: " . json_encode($data));
-            
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Errore durante la gestione della mailing list'
-            ];
-        }
-
-        */
         // Tags per evento e data (decommentare se i campi esistono)
         /*
         $tags = [];
@@ -205,58 +155,6 @@ class MailchimpService
         $sanitized = preg_replace('/[^a-zA-Z0-9\s]/', '', $name);
         $sanitized = preg_replace('/\s+/', '-', trim($sanitized));
         return strtolower($sanitized);
-    }
-
-    /**
-     * Aggiunge un subscriber con status pending (double opt-in)
-     */
-    public function addSubscriber_old($email, $nome, $cognome, $azienda, $eventoNome, $eventoData)
-    {
-        $data = [
-            'email_address' => strtolower($email),
-            'status' => 'pending', // Abilita double opt-in
-            'merge_fields' => [
-                'FNAME' => $nome,
-                'LNAME' => $cognome,
-                'COMPANY' => $azienda
-            ],
-            //'tags' => [
-            //    'evento-' . sanitizeTagName($eventoNome),
-            //    'data-' . date('Y-m', strtotime($eventoData))
-            //],
-            //'interests' => [],
-            //'language' => 'it',
-            //'vip' => false,
-            //'location' => [
-            //    'country_code' => 'IT',
-            //    'timezone' => 'Europe/Rome'
-            //]
-        ];
-
-        try {
-            $response = $this->makeApiCall("/lists/{$this->listId}/members", 'POST', $data);
-
-            return [
-                'success' => true,
-                'mailchimp_id' => $response['id'] ?? null,
-                'email_hash' => $this->getEmailHash($email),
-                'status' => $response['status'] ?? 'pending',
-                'message' => 'Subscriber aggiunto con successo. Email di conferma inviata.'
-            ];
-
-        } catch (Exception $e) {
-            // Se l'utente esiste già, prova ad aggiornarlo
-            if (strpos($e->getMessage(), 'Member Exists') !== false) {
-                return $this->updateSubscriber($email, $nome, $cognome, $azienda, $eventoNome, $eventoData);
-            }
-
-            error_log("Errore aggiunta subscriber Mailchimp: " . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Errore durante l\'aggiunta alla mailing list'
-            ];
-        }
     }
 
     /**

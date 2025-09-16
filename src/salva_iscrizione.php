@@ -6,71 +6,153 @@ require_once __DIR__ . '/classes/Database.php';
 require_once __DIR__ . '/classes/MailchimpService.php';
 
 /**
+ * Rileva se la richiesta è asincrona (AJAX)
+ */
+function isAjaxRequest() {
+    return (
+        !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
+    ) || (
+        isset($_SERVER['HTTP_CONTENT_TYPE']) && 
+        strpos($_SERVER['HTTP_CONTENT_TYPE'], 'application/json') !== false
+    ) || (
+        isset($_SERVER['CONTENT_TYPE']) && 
+        strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false
+    );
+}
+
+/**
+ * Invia risposta JSON per richieste asincrone
+ */
+function sendJsonResponse($success, $message, $data = null, $errors = null) {
+    header('Content-Type: application/json; charset=utf-8');
+    
+    $response = [
+        'success' => $success,
+        'message' => $message
+    ];
+    
+    if ($data !== null) {
+        $response['data'] = $data;
+    }
+    
+    if ($errors !== null) {
+        $response['errors'] = $errors;
+    }
+    
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/**
+ * Invia risposta tradizionale con redirect
+ */
+function sendTraditionalResponse($success, $message, $formData = null) {
+    if ($success) {
+        unset($_SESSION['form_data']);
+        $_SESSION['success'] = $message;
+    } else {
+        if ($formData) {
+            $_SESSION['form_data'] = $formData;
+        }
+        $_SESSION['error'] = $message;
+    }
+    
+    header('Location: iscrizione.php');
+    exit;
+}
+
+/**
+ * Funzione per mappare i dati JSON in arrivo al formato interno
+ */
+function mapJsonToFormData($jsonData) {
+    return [
+        'evento_id' => $jsonData['eventId'] ?? '',
+        'nome' => $jsonData['firstName'] ?? '',
+        'cognome' => $jsonData['lastName'] ?? '',
+        'email' => $jsonData['email'] ?? '',
+        'telefono' => '', // Non presente nel JSON
+        'ruolo' => '', // Non presente nel JSON
+        'azienda' => $jsonData['company'] ?? '',
+        'note' => '', // Non presente nel JSON
+        'privacy' => 'on' // Assunto accettato per richieste JSON
+    ];
+}
+
+/**
  * Funzione per validare i dati del form di iscrizione
  */
 function validateIscrizioneData($data) {
     $errors = [];
+    $fieldErrors = [];
     
     // Validazione evento_id
     if (empty($data['evento_id']) || !is_numeric($data['evento_id'])) {
         $errors[] = "Devi selezionare un evento valido.";
+        $fieldErrors['evento_id'] = "Seleziona un evento valido.";
     }
     
     // Validazione nome
     if (empty(trim($data['nome']))) {
         $errors[] = "Il nome è obbligatorio.";
+        $fieldErrors['nome'] = "Il nome è obbligatorio.";
     } elseif (strlen(trim($data['nome'])) > 100) {
         $errors[] = "Il nome non può superare i 100 caratteri.";
+        $fieldErrors['nome'] = "Il nome non può superare i 100 caratteri.";
     }
     
     // Validazione cognome
     if (empty(trim($data['cognome']))) {
         $errors[] = "Il cognome è obbligatorio.";
+        $fieldErrors['cognome'] = "Il cognome è obbligatorio.";
     } elseif (strlen(trim($data['cognome'])) > 100) {
         $errors[] = "Il cognome non può superare i 100 caratteri.";
+        $fieldErrors['cognome'] = "Il cognome non può superare i 100 caratteri.";
     }
     
     // Validazione email
     if (empty(trim($data['email']))) {
         $errors[] = "L'email è obbligatoria.";
+        $fieldErrors['email'] = "L'email è obbligatoria.";
     } elseif (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Inserisci un indirizzo email valido.";
+        $fieldErrors['email'] = "Inserisci un indirizzo email valido.";
     } elseif (strlen($data['email']) > 255) {
         $errors[] = "L'email non può superare i 255 caratteri.";
+        $fieldErrors['email'] = "L'email non può superare i 255 caratteri.";
     }
     
     // Validazione telefono (opzionale)
     if (!empty($data['telefono'])) {
         if (strlen($data['telefono']) > 30) {
             $errors[] = "Il telefono non può superare i 30 caratteri.";
+            $fieldErrors['telefono'] = "Il telefono non può superare i 30 caratteri.";
         } elseif (!preg_match('/^[0-9\s\+\-\(\)]+$/', $data['telefono'])) {
             $errors[] = "Il telefono può contenere solo numeri, spazi, +, -, (, ).";
+            $fieldErrors['telefono'] = "Il telefono può contenere solo numeri, spazi, +, -, (, ).";
         }
     }
 
     // Validazione ruolo (opzionale)
     if (!empty($data['ruolo']) && strlen($data['ruolo']) > 100) {
         $errors[] = "Il ruolo non può superare i 100 caratteri.";
+        $fieldErrors['ruolo'] = "Il ruolo non può superare i 100 caratteri.";
     }
 
     // Validazione azienda
     if (empty(trim($data['azienda']))) {
         $errors[] = "L'azienda è obbligatoria.";
+        $fieldErrors['azienda'] = "L'azienda è obbligatoria.";
     } elseif (strlen(trim($data['azienda'])) > 255) {
         $errors[] = "L'azienda non può superare i 255 caratteri.";
+        $fieldErrors['azienda'] = "L'azienda non può superare i 255 caratteri.";
     }
     
-    // Validazione note (opzionale)
-    if (!empty($data['note']) && strlen($data['note']) > 500) {
-        $errors[] = "Le note non possono superare i 500 caratteri.";
-    }
-    
-    // Validazione privacy
-    if (empty($data['privacy']) || $data['privacy'] !== 'on') {
-        $errors[] = "Devi accettare il trattamento dei dati personali per procedere.";
-    }
-    
-    return $errors;
+    return [
+        'errors' => $errors,
+        'fieldErrors' => $fieldErrors,
+        'hasErrors' => !empty($errors)
+    ];
 }
 
 /**
@@ -191,6 +273,9 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
         $iscrizioneId = $pdo->lastInsertId();
 
         // Integrazione Mailchimp - Invio con double opt-in
+        $mailchimpSuccess = false;
+        $mailchimpMessage = '';
+        
         try {
             $mailchimp = new MailchimpService();
             $mailchimpResult = $mailchimp->addSubscriber(
@@ -203,6 +288,9 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
             );
 
             if ($mailchimpResult['success']) {
+                $mailchimpSuccess = true;
+                $mailchimpMessage = $mailchimpResult['message'];
+                
                 // Aggiorna record con dati Mailchimp
                 $updateSql = "UPDATE Iscrizione_Eventi
                              SET mailchimp_id = :mailchimp_id,
@@ -231,6 +319,7 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
                 error_log("Mailchimp integration success per iscrizione {$iscrizioneId}: " . $mailchimpResult['message']);
             } else {
                 // Log errore Mailchimp ma non bloccare l'iscrizione
+                $mailchimpMessage = $mailchimpResult['error'];
                 error_log("Mailchimp integration failed per iscrizione {$iscrizioneId}: " . $mailchimpResult['error']);
 
                 $logSql = "INSERT INTO Iscrizione_Eventi_Log
@@ -246,6 +335,7 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 
         } catch (Exception $mailchimpException) {
             // Log errore ma non bloccare l'iscrizione
+            $mailchimpMessage = $mailchimpException->getMessage();
             error_log("Errore Mailchimp integration: " . $mailchimpException->getMessage());
 
             $logSql = "INSERT INTO Iscrizione_Eventi_Log
@@ -259,7 +349,11 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
             ]);
         }
 
-        return $iscrizioneId;
+        return [
+            'iscrizioneId' => $iscrizioneId,
+            'mailchimpSuccess' => $mailchimpSuccess,
+            'mailchimpMessage' => $mailchimpMessage
+        ];
 
     } catch (PDOException $e) {
         error_log("Errore inserimento iscrizione: " . $e->getMessage());
@@ -271,32 +365,57 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 try {
     // Verifica che sia una richiesta POST
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        throw new Exception("Metodo di richiesta non valido.");
+        $message = "Metodo di richiesta non valido.";
+        if (isAjaxRequest()) {
+            sendJsonResponse(false, $message);
+        } else {
+            sendTraditionalResponse(false, $message);
+        }
     }
     
-    // Recupera e sanitizza i dati dal form
-    $formData = [
-        'evento_id' => $_POST['evento_id'] ?? '',
-        'nome' => $_POST['nome'] ?? '',
-        'cognome' => $_POST['cognome'] ?? '',
-        'email' => $_POST['email'] ?? '',
-        'telefono' => $_POST['telefono'] ?? '',
-        'ruolo' => $_POST['ruolo'] ?? '',
-        'azienda' => $_POST['azienda'] ?? '',
-        'note' => $_POST['note'] ?? '',
-        'privacy' => $_POST['privacy'] ?? ''
-    ];
-    
-    // Salva i dati del form in sessione per ripopolare il form in caso di errore
-    $_SESSION['form_data'] = $formData;
+    // Recupera e sanitizza i dati
+    $formData = [];
+
+    // Verifica se la richiesta è JSON
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+        // Leggi il body JSON
+        $jsonInput = file_get_contents('php://input');
+        $jsonData = json_decode($jsonInput, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $message = "Formato JSON non valido.";
+            sendJsonResponse(false, $message);
+        }
+
+        // Mappa i dati JSON al formato interno
+        $formData = mapJsonToFormData($jsonData);
+    } else {
+        // Dati dal form tradizionale
+        $formData = [
+            'evento_id' => $_POST['evento_id'] ?? '',
+            'nome' => $_POST['nome'] ?? '',
+            'cognome' => $_POST['cognome'] ?? '',
+            'email' => $_POST['email'] ?? '',
+            'telefono' => $_POST['telefono'] ?? '',
+            'ruolo' => $_POST['ruolo'] ?? '',
+            'azienda' => $_POST['azienda'] ?? '',
+            'note' => $_POST['note'] ?? '',
+            'privacy' => $_POST['privacy'] ?? ''
+        ];
+    }
     
     // Validazione dati
-    $errors = validateIscrizioneData($formData);
+    $validation = validateIscrizioneData($formData);
 
-    if (!empty($errors)) {
-        $_SESSION['error'] = implode('<br>', $errors);
-        header('Location: iscrizione.php');
-        exit;
+    if ($validation['hasErrors']) {
+        $message = implode('<br>', $validation['errors']);
+        
+        if (isAjaxRequest()) {
+            sendJsonResponse(false, $message, null, $validation['fieldErrors']);
+        } else {
+            sendTraditionalResponse(false, $message, $formData);
+        }
     }
     
     // Connessione al database
@@ -305,9 +424,13 @@ try {
     // Verifica che l'evento esista ed è futuro
     $evento = verificaEvento($pdo, $formData['evento_id']);
     if (!$evento) {
-        $_SESSION['error'] = "L'evento selezionato non esiste o è già passato.";
-        header('Location: iscrizione.php');
-        exit;
+        $message = "L'evento selezionato non esiste o è già passato.";
+        
+        if (isAjaxRequest()) {
+            sendJsonResponse(false, $message, null, ['evento_id' => 'Evento non valido o scaduto']);
+        } else {
+            sendTraditionalResponse(false, $message, $formData);
+        }
     }
 
     // Inizia transazione per garantire consistenza dei dati
@@ -319,39 +442,63 @@ try {
 
         // Verifica se l'utente è già iscritto a questo evento
         if (verificaIscrizioneEsistente($pdo, $formData['evento_id'], $utenteId)) {
-            $_SESSION['error'] = "Sei già iscritto a questo evento con questa email.";
+            $message = "Sei già iscritto a questo evento con questa email.";
             $pdo->rollBack();
-            header('Location: iscrizione.php');
-            exit;
+            
+            if (isAjaxRequest()) {
+                sendJsonResponse(false, $message, null, ['email' => 'Email già registrata per questo evento']);
+            } else {
+                sendTraditionalResponse(false, $message, $formData);
+            }
         }
 
         // Salvataggio iscrizione con integrazione Mailchimp
-        $iscrizioneId = saveIscrizione($pdo, $formData['evento_id'], $utenteId, $evento['tipo'], $evento, $formData);
+        $risultato = saveIscrizione($pdo, $formData['evento_id'], $utenteId, $evento['tipo'], $evento, $formData);
 
         // Commit della transazione
         $pdo->commit();
+
+        // Preparazione messaggio di successo
+        $baseMessage = "Iscrizione completata con successo all'evento '{$evento['nome']}'!";
+        $numeroIscrizione = "Numero iscrizione: {$risultato['iscrizioneId']}";
+        
+        if ($risultato['mailchimpSuccess']) {
+            $emailMessage = "<strong>Importante:</strong> Controlla la tua email per confermare la partecipazione. La tua iscrizione sarà attiva solo dopo la conferma via email.";
+        } else {
+            $emailMessage = "<strong>Nota:</strong> L'iscrizione è stata salvata ma potrebbero esserci stati problemi con l'invio dell'email di conferma. Contattaci se non ricevi comunicazioni.";
+        }
+        
+        if (isAjaxRequest()) {
+            $successMessage = $baseMessage;
+            $additionalInfo = $numeroIscrizione . ". " . strip_tags($emailMessage);
+            
+            sendJsonResponse(true, $successMessage, [
+                'iscrizioneId' => $risultato['iscrizioneId'],
+                'eventoNome' => $evento['nome'],
+                'numeroIscrizione' => $risultato['iscrizioneId'],
+                'mailchimpSuccess' => $risultato['mailchimpSuccess'],
+                'additionalInfo' => $additionalInfo
+            ]);
+        } else {
+            $fullMessage = $baseMessage . "<br>" . $numeroIscrizione . "<br>" . $emailMessage;
+            sendTraditionalResponse(true, $fullMessage);
+        }
 
     } catch (Exception $e) {
         $pdo->rollBack();
         throw $e;
     }
     
-    // Successo - pulisci i dati del form dalla sessione
-    unset($_SESSION['form_data']);
-    $_SESSION['success'] = "Iscrizione completata con successo all'evento '{$evento['nome']}'! " .
-                          "Numero iscrizione: {$iscrizioneId}<br>" .
-                          "<strong>Importante:</strong> Controlla la tua email per confermare la partecipazione. " .
-                          "La tua iscrizione sarà attiva solo dopo la conferma via email.";
-
-    header('Location: iscrizione.php');
-    exit;
-    
 } catch (Exception $e) {
     // Gestione errori
-    error_log("Errore in salva_iscrizione.php: " . $e->getMessage());
-    $_SESSION['error'] = $e->getMessage();
-    header('Location: iscrizione.php');
-    exit;
+    $errorMessage = $e->getMessage();
+    error_log("Errore in salva_iscrizione.php: " . $errorMessage);
+    
+    if (isAjaxRequest()) {
+        sendJsonResponse(false, $errorMessage);
+    } else {
+        sendTraditionalResponse(false, $errorMessage, $formData ?? null);
+    }
 }
 
 ?>
