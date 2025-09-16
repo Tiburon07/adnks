@@ -3,6 +3,7 @@
 /**
  * Mailchimp API Service
  * Gestisce l'integrazione con Mailchimp per double opt-in degli eventi
+ * https://mailchimp.com/developer/marketing/api/
  */
 class MailchimpService
 {
