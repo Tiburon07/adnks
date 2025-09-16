@@ -61,6 +61,16 @@ try {
             $result = $mailchimp->getMergeFields();
             break;
 
+        case 'getAllLists':
+            $count = $_GET['count'] ?? 10;
+            $offset = $_GET['offset'] ?? 0;
+            $result = $mailchimp->getAllLists($count, $offset);
+            break;
+
+        case 'ping':
+            $result = $mailchimp->ping();
+            break;
+
         default:
             throw new Exception('Funzione non riconosciuta: ' . $functionCall);
     }

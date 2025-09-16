@@ -535,6 +535,63 @@ class MailchimpService
             ];
         }
     }
+
+    /**
+     * Ping
+     */
+    public function ping() {
+        try {
+            $endpoint = "/ping";
+
+            $response = $this->makeApiCall($endpoint, 'GET');
+
+            return [
+                'success' => true,
+                'health_status' => $response['health_status'] ?? []
+            ];
+
+        } catch (Exception $e) {
+            error_log("Errore ping: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Recupera tutte le liste Mailchimp dell'account
+     */
+    public function getAllLists($count = 10, $offset = 0) {
+        try {
+            $params = [
+                'count' => $count,
+                'offset' => $offset
+            ];
+        
+            $queryString = http_build_query($params);
+            $endpoint = "/lists?" . $queryString;
+                $response = $this->makeApiCall($endpoint, 'GET');
+                return [
+                'success' => true,
+                'lists' => $response['lists'] ?? [],
+                'total_items' => $response['total_items'] ?? 0,
+                'count' => count($response['lists'] ?? []),
+                'offset' => $offset
+            ];
+
+        } catch (Exception $e) {
+            error_log("Errore getAllLists: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'lists' => [],
+                'total_items' => 0,
+                'count' => 0,
+                'offset' => $offset
+            ];
+        }
+    }
 }
 
 /**
