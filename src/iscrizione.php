@@ -108,7 +108,7 @@ try {
                             <?php endif; ?>
                         </div>
 
-                        <form id="iscrizioneForm" action="salva_iscrizione.php" method="POST" novalidate>
+                        <form id="iscrizioneForm" action="event_registration.php" method="POST" novalidate>
                             <!-- Selezione Evento -->
                             <div class="mb-3">
                                 <label for="evento_id" class="form-label">
@@ -419,7 +419,7 @@ try {
                 // Prepara FormData
                 const formData = new FormData(form);
                 // Invia richiesta con header per identificarla come asincrona
-                const response = await fetch('salva_iscrizione.php', {
+                const response = await fetch('event_registration.php', {
                     method: 'POST',
                     body: JSON.stringify(Object.fromEntries(formData.entries())),
                     headers: {

@@ -492,7 +492,7 @@ try {
 } catch (Exception $e) {
     // Gestione errori
     $errorMessage = $e->getMessage();
-    error_log("Errore in salva_iscrizione.php: " . $errorMessage);
+    error_log("Errore in event_registration.php: " . $errorMessage);
     
     if (isAjaxRequest()) {
         sendJsonResponse(false, $errorMessage);

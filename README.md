@@ -89,7 +89,7 @@ adnks/
     ├── visualizza_utenti.php
     ├── dettagli_utente.php
     ├── salva_evento.php
-    ├── salva_iscrizione.php
+    ├── event_registration.php
     ├── update_iscrizione.php
     ├── update_utente.php
     └── classes/             # Classi PHP (DB, utility)
