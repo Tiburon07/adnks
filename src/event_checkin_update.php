@@ -143,7 +143,8 @@ try {
 	}
 
 	// Iscrizione esiste ed è associata all'utente?
-	$sReg = $pdo->prepare("SELECT 1 FROM Iscrizione_Eventi WHERE ID = :rid AND idUtente = :uid LIMIT 1");
+	$sReg = $pdo->prepare("SELECT 1 FROM Iscrizione_Eventi WHERE idEvento = :rid AND idUtente = :uid LIMIT 1");
+
 	$sReg->execute([':rid' => $registrationId, ':uid' => $userId]);
 	if (!$sReg->fetchColumn()) {
 		http_response_code(404);
@@ -171,7 +172,7 @@ try {
 	$u2 = $pdo->prepare("
         UPDATE Iscrizione_Eventi
         SET checkin = :checkin, updatedAt = NOW()
-        WHERE ID = :rid AND idUtente = :uid
+        WHERE idEvento = :rid AND idUtente = :uid
     ");
 	$u2->bindValue(':checkin', $checkinNorm, PDO::PARAM_STR);
 	$u2->bindValue(':rid',     $registrationId, PDO::PARAM_INT);
