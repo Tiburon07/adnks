@@ -292,3 +292,14 @@ Per problemi o domande:
 ---
 
 *Documentazione aggiornata: Settembre 2025*
+
+
+## file utili all'API finale:
+- /classes.*
+- event_checkin_update.php
+- event_list_checkin.php
+- event_registration.php
+- mailchimp_webhook.php
+- .env ?
+- salva_evento.php -> gli eventi dovrebbero essere già caricati su WP dal FE
+
