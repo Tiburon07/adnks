@@ -536,6 +536,10 @@ $routes = [
 			require __DIR__ . "/mailchimp_webhook.php";
 		},
 	],
+	['GET',   '#^/mailchimp/tools$#', function () {
+		require __DIR__ . '/mailchimp_tools.php';
+	}],
+
 ];
 
 $reqMethod = method();
