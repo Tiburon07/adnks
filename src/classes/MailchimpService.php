@@ -56,7 +56,7 @@ class MailchimpService
 	/**
 	 * Effettua chiamata API a Mailchimp
 	 */
-	/*
+
 	private function makeApiCall($endpoint, $method = 'GET', $data = null)
 	{
 		$url = $this->baseUrl . $endpoint;
@@ -108,9 +108,9 @@ class MailchimpService
 
 		return $decodedResponse;
 	}
-	*/
 
-	private function makeApiCall(string $method, string $endpoint, array $query = [], array $body = []): array
+
+	/* 	private function makeApiCall(string $method, string $endpoint, array $query = [], array $body = []): array
 	{
 		$url = rtrim($this->baseUrl, '/') . '/' . ltrim($endpoint, '/');
 		if ($method === 'GET' && !empty($query)) {
@@ -172,7 +172,7 @@ class MailchimpService
 		}
 
 		return is_array($data) ? $data : [];
-	}
+	} */
 
 
 
