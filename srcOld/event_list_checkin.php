@@ -30,6 +30,7 @@ $eventId = (int)$eventIdStr;
 // Adatta la riga seguente al tuo costruttore/metodo reale:
 try {
 	if (class_exists('Database')) {
+		// Esempi comuni: scegli quello che hai nella tua classe
 		if (method_exists('Database', 'getConnection')) {
 			$pdo = getDB();
 		} else {

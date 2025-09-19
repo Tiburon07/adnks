@@ -1,265 +1,566 @@
 <?php
-// phpinfo();
-// die();
-// Avvio la sessione per gestire eventuali messaggi di feedback
-session_start();
 
-// Recupero eventuali messaggi dalla sessione
-$success_message = isset($_SESSION['success']) ? $_SESSION['success'] : '';
-$error_message = isset($_SESSION['error']) ? $_SESSION['error'] : '';
+/**
+ * Front Controller - index.php
+ * Entry point unico per l'intera API.
+ *
+ * Aggiunti "hints" nel payload della rotta GET "/" per aiutare il FE.
+ */
 
-// Pulisco i messaggi dalla sessione dopo averli recuperati
-unset($_SESSION['success'], $_SESSION['error']);
+declare(strict_types=1);
 
-// Valori predefiniti per il form (in caso di errori di validazione)
-$nome = isset($_SESSION['form_data']['nome']) ? $_SESSION['form_data']['nome'] : '';
-$dataEvento = isset($_SESSION['form_data']['dataEvento']) ? $_SESSION['form_data']['dataEvento'] : '';
-$categoria = isset($_SESSION['form_data']['categoria']) ? $_SESSION['form_data']['categoria'] : '';
-$tipo = isset($_SESSION['form_data']['tipo']) ? $_SESSION['form_data']['tipo'] : '';
+// --------- CORS ---------
+$allowedOrigins = ["*"]; // in produzione, sostituisci con la whitelist
+$origin = $_SERVER["HTTP_ORIGIN"] ?? "*";
+if (!in_array($origin, $allowedOrigins, true) && $allowedOrigins !== ["*"]) {
+	$origin = $allowedOrigins[0];
+}
+header("Access-Control-Allow-Origin: " . $origin);
+header("Vary: Origin");
+header("Access-Control-Allow-Credentials: true");
+header(
+	"Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override"
+);
+header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+header("Content-Type: application/json; charset=utf-8");
 
-// Pulisco i dati del form dalla sessione
-unset($_SESSION['form_data']);
-?>
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestione Eventi</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-    <div class="container py-5">
-        <!-- Header con navigazione -->
-        <div class="row mb-4">
-            <div class="col">
-                <h1 class="h2 mb-0">
-                    <i class="bi bi-calendar-event me-2"></i>
-                    Gestione Eventi
-                </h1>
-                <p class="text-muted">Crea e gestisci i tuoi eventi</p>
-            </div>
-            <div class="col-auto">
-                <div class="btn-group" role="group">
-                    <a href="iscrizione.php" class="btn btn-success">
-                        <i class="bi bi-person-plus me-1"></i>
-                        Iscriviti ad un Evento
-                    </a>
-                    <a href="visualizza_iscrizioni.php" class="btn btn-outline-info">
-                        <i class="bi bi-people me-1"></i>
-                        Visualizza Iscrizioni
-                    </a>
-                    <a href="visualizza_utenti.php" class="btn btn-outline-secondary">
-                        <i class="bi bi-person-lines-fill me-1"></i>
-                        Gestione Utenti
-                    </a>
-                </div>
-            </div>
-        </div>
+if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
+	http_response_code(204);
+	exit();
+}
 
-        <div class="row justify-content-center">
-            <div class="col-md-8 col-lg-6">
-                <div class="card shadow">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">
-                            <i class="bi bi-calendar-plus me-2"></i>
-                            Nuovo Evento
-                        </h4>
-                    </div>
-                    <div class="card-body">
-                        <?php if ($success_message): ?>
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                <i class="bi bi-check-circle me-2"></i>
-                                <?= htmlspecialchars($success_message) ?>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        <?php endif; ?>
+// --------- Helpers ---------
+function send_json(int $status, $payload): void
+{
+	http_response_code($status);
+	echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+	exit();
+}
 
-                        <?php if ($error_message): ?>
-                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                <?= htmlspecialchars($error_message) ?>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        <?php endif; ?>
+function method(): string
+{
+	$m = $_SERVER["REQUEST_METHOD"] ?? "GET";
+	if (
+		isset($_SERVER["HTTP_X_HTTP_METHOD_OVERRIDE"]) &&
+		in_array(
+			$_SERVER["HTTP_X_HTTP_METHOD_OVERRIDE"],
+			["PUT", "PATCH", "DELETE"],
+			true
+		)
+	) {
+		$m = $_SERVER["HTTP_X_HTTP_METHOD_OVERRIDE"];
+	}
+	return strtoupper($m);
+}
 
-                        <form action="salva_evento.php" method="POST" novalidate>
-                            <!-- Nome Evento -->
-                            <div class="mb-3">
-                                <label for="nome" class="form-label">
-                                    <i class="bi bi-card-text me-1"></i>
-                                    Nome Evento *
-                                </label>
-                                <input 
-                                    type="text" 
-                                    class="form-control" 
-                                    id="nome" 
-                                    name="nome" 
-                                    value="<?= htmlspecialchars($nome) ?>"
-                                    required
-                                    maxlength="255"
-                                    placeholder="Inserisci il nome dell'evento"
-                                >
-                                <div class="invalid-feedback">
-                                    Il nome dell'evento è obbligatorio (max 255 caratteri).
-                                </div>
-                            </div>
+function path(): string
+{
+	$uri = $_SERVER["REQUEST_URI"] ?? "/";
+	$uri = strtok($uri, "?") ?: "/";
+	$uri = preg_replace("#//+#", "/", $uri);
+	if ($uri !== "/" && substr($uri, -1) === "/") {
+		$uri = rtrim($uri, "/");
+	}
+	return $uri;
+}
 
-                            <!-- Data e Ora Evento -->
-                            <div class="mb-3">
-                                <label for="dataEvento" class="form-label">
-                                    <i class="bi bi-calendar3 me-1"></i>
-                                    Data e Ora Evento *
-                                </label>
-                                <input 
-                                    type="datetime-local" 
-                                    class="form-control" 
-                                    id="dataEvento" 
-                                    name="dataEvento" 
-                                    value="<?= htmlspecialchars($dataEvento) ?>"
-                                    required
-                                    min="<?= date('Y-m-d\TH:i') ?>"
-                                >
-                                <div class="invalid-feedback">
-                                    La data e ora dell'evento sono obbligatorie.
-                                </div>
-                                <div class="form-text">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Seleziona una data futura
-                                </div>
-                            </div>
+// Parse JSON body (retrocompatibilità: riversa su $_POST)
+$rawBody = file_get_contents("php://input");
+if ($rawBody !== "" && $rawBody !== false) {
+	$contentType =
+		$_SERVER["CONTENT_TYPE"] ?? ($_SERVER["HTTP_CONTENT_TYPE"] ?? "");
+	if (stripos($contentType, "application/json") !== false) {
+		$json = json_decode($rawBody, true);
+		if (json_last_error() !== JSON_ERROR_NONE) {
+			send_json(400, [
+				"success" => false,
+				"error" => "JSON non valido: " . json_last_error_msg(),
+			]);
+		}
+		if (is_array($json)) {
+			foreach ($json as $k => $v) {
+				$_POST[$k] = $v;
+			}
+		}
+	}
+}
 
-                            <!-- Categoria -->
-                            <div class="mb-3">
-                                <label for="categoria" class="form-label">
-                                    <i class="bi bi-tags me-1"></i>
-                                    Categoria *
-                                </label>
-                                <select class="form-select" id="categoria" name="categoria" required>
-                                    <option value="">Seleziona una categoria</option>
-                                    <option value="Conferenza" <?= $categoria === 'Conferenza' ? 'selected' : '' ?>>Conferenza</option>
-                                    <option value="Workshop" <?= $categoria === 'Workshop' ? 'selected' : '' ?>>Workshop</option>
-                                    <option value="Seminario" <?= $categoria === 'Seminario' ? 'selected' : '' ?>>Seminario</option>
-                                    <option value="Meeting" <?= $categoria === 'Meeting' ? 'selected' : '' ?>>Meeting</option>
-                                    <option value="Formazione" <?= $categoria === 'Formazione' ? 'selected' : '' ?>>Formazione</option>
-                                    <option value="Evento Sociale" <?= $categoria === 'Evento Sociale' ? 'selected' : '' ?>>Evento Sociale</option>
-                                    <option value="Presentazione" <?= $categoria === 'Presentazione' ? 'selected' : '' ?>>Presentazione</option>
-                                    <option value="Altro" <?= $categoria === 'Altro' ? 'selected' : '' ?>>Altro</option>
-                                </select>
-                                <div class="invalid-feedback">
-                                    Seleziona una categoria per l'evento.
-                                </div>
-                            </div>
+// --------- Routing ---------
+$routes = [
+	[
+		"GET",
+		'#^/$#',
+		function () {
+			send_json(200, [
+				"name" => "ADNKronos Event API",
+				"version" => "1.0",
+				"time" => date("c"),
+				"endpoints" => [
+					["POST", "/event-registration"],
+					["GET", "/events/{eventId}/checkins"],
+					["POST", "/event-checkin-update"],
+					["PUT", "/event-checkin-update"],
+					["PATCH", "/event-checkin-update"],
+					["POST", "/events"],
+					["POST", "/mailchimp/webhook"],
+					["GET", "/mailchimp/webhook"],
+				],
+				"hints" => [
+					[
+						"endpoint" => "POST /event-registration",
+						"expects" => [
+							"headers" => ["Content-Type: application/json"],
+							"body" => [
+								"evento_id (int, required)",
+								"nome (string, required)",
+								"cognome (string, required)",
+								"email (string, required, valid email)",
+								"azienda (string, required)",
+								"telefono (string, optional, digits/+/-/() allowed)",
+								"ruolo (string, optional)",
+								"checkin (string, optional: NA|presenza|virtuale; default NA)",
+							],
+						],
+						"returns" => [
+							'200 OK -> {"success":true,"message":"Iscrizione ricevuta...","idIscrizione":987}',
+							'400 Bad Request -> {"success":false,"error":"...", "fieldErrors":{"email":"..."}}',
+						],
+						"curl" =>
+						'curl -X POST https://<host>/event-registration -H "Content-Type: application/json" -d \'{"evento_id":123,"nome":"Mario","cognome":"Rossi","email":"mario.rossi@example.com","azienda":"ACME S.p.A.","telefono":"3331234567","ruolo":"Marketing","checkin":"NA"}\'',
+					],
+					[
+						"endpoint" => "GET /events/{eventId}/checkins",
+						"expects" => [
+							"path" => ["eventId (int, Eventi.ID)"],
+						],
+						"returns" => [
+							'200 OK -> [{"idIscrizione":987,"utente":{"id":456,"nome":"Mario","cognome":"Rossi","email":"..."}, "checkin":"NA","ruolo":"Marketing"}]',
+							'404 Not Found -> {"success":false,"error":"Nessuna iscrizione trovata..."}',
+						],
+						"curl" => "curl https://<host>/events/123/checkins",
+					],
+					[
+						"endpoint" => "POST|PUT|PATCH /event-checkin-update",
+						"expects" => [
+							"headers" => ["Content-Type: application/json"],
+							"body" => [
+								"registrationId (int, required, Iscrizione_Eventi.ID)",
+								"userId (int, required, Utenti.ID)",
+								"checkin (string, required: presenza|virtuale|NA)",
+								"ruolo (string, required)",
+							],
+						],
+						"returns" => [
+							'200 OK -> {"success":true,"updated":{"registrationId":987,"userId":456,"checkin":"presenza","ruolo":"Responsabile"}}',
+							"400 Bad Request / 404 Not Found / 500 Internal Server Error",
+						],
+						"curl" =>
+						'curl -X POST https://<host>/event-checkin-update -H "Content-Type: application/json" -d \'{"registrationId":987,"userId":456,"checkin":"presenza","ruolo":"Responsabile"}\'',
+					],
+					[
+						"endpoint" => "POST /events",
+						"expects" => [
+							"headers" => ["Content-Type: application/json"],
+							"body" => [
+								"nome (string, required)",
+								"dataEvento (string, required, ISO-8601: YYYY-MM-DDTHH:mm)",
+								"categoria (string, required)",
+								'tipo (string, required: "in presenza"|"virtuale")',
+							],
+						],
+						"returns" => [
+							'201 Created/200 OK -> {"success":true,"idEvento":123}',
+							"400 Bad Request",
+						],
+						"curl" =>
+						'curl -X POST https://<host>/events -H "Content-Type: application/json" -d \'{"nome":"ADNK • Talk 2025","dataEvento":"2025-10-15T18:30","categoria":"convegno","tipo":"in presenza"}\'',
+					],
+					[
+						"endpoint" => "GET|POST /mailchimp/webhook",
+						"expects" => [
+							"GET" => "usato da Mailchimp per verifica/echo",
+							"POST" =>
+							"payload webhook Mailchimp (conferme, aggiornamenti).",
+						],
+						"returns" => [
+							'200 OK -> {"success":true} oppure eco di diagnostica',
+							"400/500 su payload non valido",
+						],
+						"note" =>
+						"Gli eventi sono loggati in Mailchimp_Webhook_Log con timestamp.",
+					],
+				],
+				"schemas" => [
+					"EventRegistrationRequest" => [
+						"type" => "object",
+						"required" => [
+							"evento_id",
+							"nome",
+							"cognome",
+							"email",
+							"azienda",
+						],
+						"properties" => [
+							"evento_id" => [
+								"type" => "integer",
+								"description" => "ID evento (Eventi.ID)",
+							],
+							"nome" => ["type" => "string", "maxLength" => 100],
+							"cognome" => [
+								"type" => "string",
+								"maxLength" => 100,
+							],
+							"email" => [
+								"type" => "string",
+								"format" => "email",
+								"maxLength" => 255,
+							],
+							"azienda" => [
+								"type" => "string",
+								"maxLength" => 255,
+							],
+							"telefono" => [
+								"type" => "string",
+								"maxLength" => 30,
+								"pattern" => '^[0-9\\s\\+\\-\\(\\)]+$',
+							],
+							"ruolo" => [
+								"type" => "string",
+								"maxLength" => 100,
+								"nullable" => true,
+							],
+							"checkin" => [
+								"type" => "string",
+								"enum" => ["NA", "presenza", "virtuale"],
+								"default" => "NA",
+							],
+						],
+						"example" => [
+							"evento_id" => 123,
+							"nome" => "Mario",
+							"cognome" => "Rossi",
+							"email" => "mario.rossi@example.com",
+							"azienda" => "ACME S.p.A.",
+							"telefono" => "3331234567",
+							"ruolo" => "Marketing",
+							"checkin" => "NA",
+						],
+					],
 
-                            <!-- Tipo Evento -->
-                            <div class="mb-4">
-                                <label class="form-label">
-                                    <i class="bi bi-geo-alt me-1"></i>
-                                    Tipo Evento *
-                                </label>
-                                <div class="row">
-                                    <div class="col-6">
-                                        <div class="form-check">
-                                            <input 
-                                                class="form-check-input" 
-                                                type="radio" 
-                                                name="tipo" 
-                                                id="presenza" 
-                                                value="presenza"
-                                                <?= $tipo === 'presenza' ? 'checked' : '' ?>
-                                                required
-                                            >
-                                            <label class="form-check-label" for="presenza">
-                                                <i class="bi bi-people me-1"></i>
-                                                In Presenza
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="form-check">
-                                            <input 
-                                                class="form-check-input" 
-                                                type="radio" 
-                                                name="tipo" 
-                                                id="virtuale" 
-                                                value="virtuale"
-                                                <?= $tipo === 'virtuale' ? 'checked' : '' ?>
-                                                required
-                                            >
-                                            <label class="form-check-label" for="virtuale">
-                                                <i class="bi bi-camera-video me-1"></i>
-                                                Virtuale
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="invalid-feedback d-block" id="tipo-error" style="display: none !important;">
-                                    Seleziona il tipo di evento.
-                                </div>
-                            </div>
+					"EventRegistrationSuccessResponse" => [
+						"type" => "object",
+						"properties" => [
+							"success" => ["type" => "boolean", "const" => true],
+							"message" => ["type" => "string"],
+							"idIscrizione" => ["type" => "integer"],
+						],
+						"example" => [
+							"success" => true,
+							"message" =>
+							"Iscrizione ricevuta. Controlla l’email per confermare.",
+							"idIscrizione" => 987,
+						],
+					],
 
-                            <!-- Pulsanti -->
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                <button type="reset" class="btn btn-outline-secondary me-md-2">
-                                    <i class="bi bi-arrow-clockwise me-1"></i>
-                                    Reset
-                                </button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-save me-1"></i>
-                                    Salva Evento
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+					"ValidationErrorResponse" => [
+						"type" => "object",
+						"properties" => [
+							"success" => [
+								"type" => "boolean",
+								"const" => false,
+							],
+							"error" => ["type" => "string"],
+							"fieldErrors" => [
+								"type" => "object",
+								"additionalProperties" => ["type" => "string"],
+							],
+						],
+						"example" => [
+							"success" => false,
+							"error" => "Validazione fallita",
+							"fieldErrors" => [
+								"email" =>
+								"Inserisci un indirizzo email valido.",
+							],
+						],
+					],
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Validazione personalizzata Bootstrap
-        (function() {
-            'use strict';
-            window.addEventListener('load', function() {
-                var forms = document.getElementsByTagName('form');
-                var validation = Array.prototype.filter.call(forms, function(form) {
-                    form.addEventListener('submit', function(event) {
-                        // Validazione custom per i radio button
-                        var tipoRadios = document.getElementsByName('tipo');
-                        var tipoSelected = false;
-                        for (var i = 0; i < tipoRadios.length; i++) {
-                            if (tipoRadios[i].checked) {
-                                tipoSelected = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!tipoSelected) {
-                            document.getElementById('tipo-error').style.display = 'block';
-                            event.preventDefault();
-                            event.stopPropagation();
-                        } else {
-                            document.getElementById('tipo-error').style.display = 'none';
-                        }
-                        
-                        if (form.checkValidity() === false || !tipoSelected) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                        }
-                        form.classList.add('was-validated');
-                    }, false);
-                });
-            }, false);
-        })();
+					"CheckinsListResponse" => [
+						"type" => "array",
+						"items" => ['$ref' => "#Schema:CheckinRecord"],
+						"example" => [
+							[
+								"idIscrizione" => 987,
+								"checkin" => "NA",
+								"ruolo" => "Marketing",
+								"utente" => [
+									"id" => 456,
+									"nome" => "Mario",
+									"cognome" => "Rossi",
+									"email" => "mario.rossi@example.com",
+								],
+							],
+						],
+					],
 
-        // Aggiorna il valore min del datetime-local ogni volta che la pagina si carica
-        document.addEventListener('DOMContentLoaded', function() {
-            var now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('dataEvento').min = now.toISOString().slice(0, 16);
-        });
-    </script>
-</body>
-</html>
+					"CheckinRecord" => [
+						"type" => "object",
+						"properties" => [
+							"idIscrizione" => ["type" => "integer"],
+							"checkin" => [
+								"type" => "string",
+								"enum" => ["NA", "presenza", "virtuale"],
+							],
+							"ruolo" => ["type" => "string", "nullable" => true],
+							"utente" => ['$ref' => "#Schema:UserSummary"],
+						],
+					],
+
+					"UserSummary" => [
+						"type" => "object",
+						"properties" => [
+							"id" => ["type" => "integer"],
+							"nome" => ["type" => "string"],
+							"cognome" => ["type" => "string"],
+							"email" => [
+								"type" => "string",
+								"format" => "email",
+							],
+						],
+					],
+
+					"CheckinUpdateRequest" => [
+						"type" => "object",
+						"required" => ["userId", "checkin", "ruolo"],
+						"properties" => [
+							// Preferito
+							"registrationId" => [
+								"type" => "integer",
+								"description" => "Iscrizione_Eventi.ID",
+							],
+							// Legacy (accettato ma deprecato in favore di registrationId)
+							"eventId" => [
+								"type" => "integer",
+								"deprecated" => true,
+								"description" =>
+								"Legacy alias di registrationId",
+							],
+							"userId" => [
+								"type" => "integer",
+								"description" => "Utenti.ID",
+							],
+							"checkin" => [
+								"type" => "string",
+								"enum" => ["presenza", "virtuale", "NA"],
+							],
+							"ruolo" => ["type" => "string", "maxLength" => 100],
+						],
+						"example" => [
+							"registrationId" => 987,
+							"userId" => 456,
+							"checkin" => "presenza",
+							"ruolo" => "Responsabile",
+						],
+					],
+
+					"CheckinUpdateSuccessResponse" => [
+						"type" => "object",
+						"properties" => [
+							"success" => ["type" => "boolean", "const" => true],
+							"updated" => [
+								"type" => "object",
+								"properties" => [
+									"registrationId" => ["type" => "integer"],
+									"userId" => ["type" => "integer"],
+									"checkin" => [
+										"type" => "string",
+										"enum" => [
+											"presenza",
+											"virtuale",
+											"NA",
+										],
+									],
+									"ruolo" => ["type" => "string"],
+								],
+							],
+						],
+						"example" => [
+							"success" => true,
+							"updated" => [
+								"registrationId" => 987,
+								"userId" => 456,
+								"checkin" => "presenza",
+								"ruolo" => "Responsabile",
+							],
+						],
+					],
+
+					"CreateEventRequest" => [
+						"type" => "object",
+						"required" => [
+							"nome",
+							"dataEvento",
+							"categoria",
+							"tipo",
+						],
+						"properties" => [
+							"nome" => ["type" => "string", "maxLength" => 255],
+							"dataEvento" => [
+								"type" => "string",
+								"format" => "date-time",
+								"pattern" =>
+								'^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$',
+							],
+							"categoria" => [
+								"type" => "string",
+								"maxLength" => 100,
+							],
+							"tipo" => [
+								"type" => "string",
+								"enum" => ["in presenza", "virtuale"],
+							],
+						],
+						"example" => [
+							"nome" => "ADNK • Talk 2025",
+							"dataEvento" => "2025-10-15T18:30",
+							"categoria" => "convegno",
+							"tipo" => "in presenza",
+						],
+					],
+
+					"CreateEventResponse" => [
+						"type" => "object",
+						"properties" => [
+							"success" => ["type" => "boolean"],
+							"idEvento" => ["type" => "integer"],
+						],
+						"example" => ["success" => true, "idEvento" => 123],
+					],
+
+					"MailchimpWebhookEvent" => [
+						"type" => "object",
+						"description" =>
+						"Payload generico webhook Mailchimp (subscribe/update/unsubscribe...)",
+						"properties" => [
+							"type" => ["type" => "string"],
+							"email" => [
+								"type" => "string",
+								"format" => "email",
+							],
+							"mailchimp_id" => ["type" => "string"],
+							"data" => [
+								"type" => "object",
+								"description" => "contenuto evento grezzo",
+							],
+						],
+						"example" => [
+							"type" => "subscribe",
+							"email" => "mario.rossi@example.com",
+							"mailchimp_id" => "a1b2c3d4",
+							"data" => ["status" => "subscribed"],
+						],
+					],
+
+					"StandardErrorResponse" => [
+						"type" => "object",
+						"properties" => [
+							"success" => [
+								"type" => "boolean",
+								"const" => false,
+							],
+							"error" => ["type" => "string"],
+						],
+						"example" => [
+							"success" => false,
+							"error" => "Endpoint non trovato",
+						],
+					],
+				],
+			]);
+		},
+	],
+	[
+		"POST",
+		'#^/event-registration$#',
+		function () {
+			require __DIR__ . "/event_registration.php";
+		},
+	],
+	[
+		"GET",
+		'#^/events/(\d+)/checkins$#',
+		function ($matches) {
+			$_GET["eventId"] = $matches[0][0];
+			require __DIR__ . "/event_list_checkin.php";
+		},
+	],
+	[
+		"POST",
+		'#^/event-checkin-update$#',
+		function () {
+			require __DIR__ . "/event_checkin_update.php";
+		},
+	],
+	[
+		"PUT",
+		'#^/event-checkin-update$#',
+		function () {
+			require __DIR__ . "/event_checkin_update.php";
+		},
+	],
+	[
+		"PATCH",
+		'#^/event-checkin-update$#',
+		function () {
+			require __DIR__ . "/event_checkin_update.php";
+		},
+	],
+	[
+		"POST",
+		'#^/events$#',
+		function () {
+			require __DIR__ . "/salva_evento.php";
+		},
+	],
+	[
+		"GET",
+		'#^/mailchimp/webhook$#',
+		function () {
+			require __DIR__ . "/mailchimp_webhook.php";
+		},
+	],
+	[
+		"POST",
+		'#^/mailchimp/webhook$#',
+		function () {
+			require __DIR__ . "/mailchimp_webhook.php";
+		},
+	],
+];
+
+$reqMethod = method();
+$reqPath = path();
+
+foreach ($routes as [$m, $regex, $handler]) {
+	if ($reqMethod === $m && preg_match($regex, $reqPath, $matches)) {
+		array_shift($matches);
+		$handler($matches);
+		send_json(200, ["success" => true]);
+	}
+}
+
+// Fallback legacy
+if (preg_match('#^/([a-zA-Z0-9_\-]+)\.php$#', $reqPath, $m)) {
+	$file = __DIR__ . "/" . $m[1] . ".php";
+	if (is_file($file)) {
+		require $file;
+		exit();
+	}
+}
+
+send_json(404, [
+	"success" => false,
+	"error" => "Endpoint non trovato",
+	"method" => $reqMethod,
+	"path" => $reqPath,
+]);

@@ -1,0 +1,12 @@
+# .htaccess per instradare tutto verso index.php (Apache + PHP-FPM)
+# Mettere questo file nella root della cartella "appeventi".
+
+RewriteEngine On
+
+# Non toccare file/dir esistenti
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Altrimenti manda tutto a index.php
+RewriteRule ^ index.php [QSA,L]
