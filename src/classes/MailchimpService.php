@@ -110,7 +110,7 @@ class MailchimpService
 	}
 	*/
 
-	private function makeApiCall(string $method, string $endpoint, array $query = null, array $body = null): array
+	private function makeApiCall(string $method, string $endpoint, array $query = [], array $body = []): array
 	{
 		$url = rtrim($this->baseUrl, '/') . '/' . ltrim($endpoint, '/');
 		if ($method === 'GET' && !empty($query)) {
@@ -118,40 +118,62 @@ class MailchimpService
 		}
 
 		$ch = curl_init($url);
+
+		// Header minimali: evita 'Expect:' e 'Connection:' che con alcuni CDN/Akamai causano 400
+		$headers = [
+			'Accept: application/json',
+			'Content-Type: application/json'
+		];
+
 		curl_setopt_array($ch, [
 			CURLOPT_CUSTOMREQUEST  => strtoupper($method),
 			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_HTTPHEADER     => [
-				'Content-Type: application/json',
-				'Accept: application/json'
-			],
-			// Basic auth: qualsiasi username, password = API key
+			CURLOPT_HTTPHEADER     => $headers,
+
+			// Basic Auth esplicita
+			CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
 			CURLOPT_USERPWD        => 'anystring:' . $this->apiKey,
+
+			// Forza HTTP/1.1 (niente HTTP/2)
+			CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+
+			// Disabilita eventuali proxy di ambiente (causa frequente di 400 Akamai)
+			CURLOPT_PROXY          => '',
+
+			// SSL “strict” (lascia verifiche attive)
+			CURLOPT_SSL_VERIFYPEER => true,
+			CURLOPT_SSL_VERIFYHOST => 2,
+
 			CURLOPT_TIMEOUT        => 20,
+			CURLOPT_USERAGENT      => 'ADNK-EventAPI/1.0 (+PHP cURL)',
 		]);
 
 		if ($method !== 'GET' && !empty($body)) {
 			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
 		}
 
-		$raw = curl_exec($ch);
+		$raw  = curl_exec($ch);
 		$http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
 		if ($raw === false) {
 			$err = curl_error($ch);
 			curl_close($ch);
 			throw new \RuntimeException('cURL: ' . $err, 500);
 		}
+
 		curl_close($ch);
 
 		$data = json_decode($raw, true);
+
 		if ($http >= 400) {
-			// Mailchimp di solito mette un campo "detail" nel body errore
-			$detail = is_array($data) && isset($data['detail']) ? $data['detail'] : $raw;
+			// Mailchimp di solito invia 'detail' nel body JSON; se riceviamo HTML da Akamai, ricadiamo su $raw
+			$detail = (is_array($data) && isset($data['detail'])) ? $data['detail'] : $raw;
 			throw new \RuntimeException("Errore Mailchimp ({$http}): " . $detail, $http);
 		}
 
 		return is_array($data) ? $data : [];
 	}
+
 
 
 
