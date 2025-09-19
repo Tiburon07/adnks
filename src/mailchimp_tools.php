@@ -53,6 +53,10 @@ try {
 		'getMergeFields',
 		'getAllLists',
 		'ping',
+		'debugConfig',
+		'getAllLists',
+		'getListSettings',
+
 	];
 
 	$call = $_GET['call'] ?? 'getAllMembers';
