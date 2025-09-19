@@ -12,6 +12,7 @@ class MailchimpService
 	private $serverPrefix;
 	private $baseUrl;
 
+	/*
 	public function __construct()
 	{
 		$this->apiKey = $_ENV['MAILCHIMP_API_KEY'] ?? '';
@@ -24,10 +25,38 @@ class MailchimpService
 			throw new Exception('Mailchimp API credentials non configurate correttamente');
 		}
 	}
+	*/
+
+	public function __construct()
+	{
+		EnvLoader::load(__DIR__ . '/../');
+
+		$this->apiKey       = EnvLoader::get('MAILCHIMP_API_KEY');
+		$this->listId       = EnvLoader::get('MAILCHIMP_LIST_ID');
+		$this->serverPrefix = EnvLoader::get('MAILCHIMP_SERVER_PREFIX'); // es. us21
+
+		if (empty($this->apiKey)) {
+			throw new \RuntimeException('MAILCHIMP_API_KEY mancante nel .env');
+		}
+
+		// Se non impostato, ricava il DC dall’API key (parte dopo il trattino)
+		if (empty($this->serverPrefix) && strpos($this->apiKey, '-') !== false) {
+			$parts = explode('-', $this->apiKey);
+			$this->serverPrefix = end($parts);
+		}
+
+		if (empty($this->serverPrefix)) {
+			throw new \RuntimeException('MAILCHIMP_SERVER_PREFIX mancante (es. us21).');
+		}
+
+		$this->baseUrl = "https://{$this->serverPrefix}.api.mailchimp.com/3.0/";
+	}
+
 
 	/**
 	 * Effettua chiamata API a Mailchimp
 	 */
+	/*
 	private function makeApiCall($endpoint, $method = 'GET', $data = null)
 	{
 		$url = $this->baseUrl . $endpoint;
@@ -79,6 +108,52 @@ class MailchimpService
 
 		return $decodedResponse;
 	}
+	*/
+
+	private function makeApiCall(string $method, string $endpoint, array $query = null, array $body = null): array
+	{
+		$url = rtrim($this->baseUrl, '/') . '/' . ltrim($endpoint, '/');
+		if ($method === 'GET' && !empty($query)) {
+			$url .= '?' . http_build_query($query);
+		}
+
+		$ch = curl_init($url);
+		curl_setopt_array($ch, [
+			CURLOPT_CUSTOMREQUEST  => strtoupper($method),
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_HTTPHEADER     => [
+				'Content-Type: application/json',
+				'Accept: application/json'
+			],
+			// Basic auth: qualsiasi username, password = API key
+			CURLOPT_USERPWD        => 'anystring:' . $this->apiKey,
+			CURLOPT_TIMEOUT        => 20,
+		]);
+
+		if ($method !== 'GET' && !empty($body)) {
+			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+		}
+
+		$raw = curl_exec($ch);
+		$http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		if ($raw === false) {
+			$err = curl_error($ch);
+			curl_close($ch);
+			throw new \RuntimeException('cURL: ' . $err, 500);
+		}
+		curl_close($ch);
+
+		$data = json_decode($raw, true);
+		if ($http >= 400) {
+			// Mailchimp di solito mette un campo "detail" nel body errore
+			$detail = is_array($data) && isset($data['detail']) ? $data['detail'] : $raw;
+			throw new \RuntimeException("Errore Mailchimp ({$http}): " . $detail, $http);
+		}
+
+		return is_array($data) ? $data : [];
+	}
+
+
 
 	/**
 	 * Genera hash MD5 dell'email per identificare subscriber
@@ -411,7 +486,7 @@ class MailchimpService
 	/**
 	 * Controlla l'attività recente di un membro
 	 */
-	public function getMemberActivity($email, $count = 10)
+	/* 	public function getMemberActivity($email, $count = 10)
 	{
 		try {
 			$subscriberHash = $this->getEmailHash($email);
@@ -425,7 +500,31 @@ class MailchimpService
 			error_log("Errore getMemberActivity per {$email}: " . $e->getMessage());
 			return [];
 		}
+	} */
+
+	public function getMemberActivity(string $email, int $count = 10): array
+	{
+		$email = trim($email);
+		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+			throw new \InvalidArgumentException('Email non valida');
+		}
+
+		$subscriberHash = md5(strtolower($email));
+		$count = max(1, min($count, 100));
+
+		try {
+			$resp = $this->makeApiCall('GET', "lists/{$this->listId}/members/{$subscriberHash}/activity", ['count' => $count]);
+			return $resp['activity'] ?? [];
+		} catch (\Throwable $e) {
+			$code = (int)$e->getCode();
+			if ($code === 404 || strpos($e->getMessage(), '(404)') !== false) {
+				// membro non trovato nell’audience
+				throw new \RuntimeException('MAILCHIMP_MEMBER_NOT_FOUND', 404);
+			}
+			throw $e;
+		}
 	}
+
 
 	/**
 	 * Verifica se un'email è nella lista di bounce/complaint
@@ -585,6 +684,22 @@ class MailchimpService
 				'offset' => $offset
 			];
 		}
+	}
+
+	public function debugConfig(): array
+	{
+		$dcFromKey = null;
+		if (strpos($this->apiKey, '-') !== false) {
+			$parts = explode('-', $this->apiKey);
+			$dcFromKey = end($parts);
+		}
+		return [
+			'baseUrl'       => $this->baseUrl,
+			'serverPrefix'  => $this->serverPrefix,
+			'listId'        => $this->listId,
+			'apiKeySuffix'  => '...' . substr($this->apiKey, -6), // non esporre tutta la key
+			'dcFromKey'     => $dcFromKey
+		];
 	}
 }
 

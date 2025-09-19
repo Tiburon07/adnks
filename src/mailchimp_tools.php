@@ -69,6 +69,10 @@ try {
 	$result = null;
 
 	switch ($call) {
+		case 'debugConfig': {
+				$result = $mailchimp->debugConfig();
+				break;
+			}
 		case 'getAllMembers': {
 				$count  = isset($_GET['count'])  ? (int)$_GET['count']  : 1000;
 				$offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
@@ -94,7 +98,6 @@ try {
 				$offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 				$count  = max(1, min($count, 100));
 				$offset = max(0, $offset);
-
 				$params = compact('count', 'offset');
 				$result = $mailchimp->getAllLists($count, $offset);
 				break;
@@ -126,7 +129,19 @@ try {
 			}
 
 		case 'getListSettings': {
-				$result = $mailchimp->getListSettings();
+				try {
+					$result = $mailchimp->getListSettings();
+				} catch (\Throwable $e) {
+					$code = (int)$e->getCode();
+					if ($code === 404) {
+						respond(404, [
+							'success' => false,
+							'error'   => 'list_not_found',
+							'message' => 'La LIST_ID nel .env non esiste o non appartiene a questo data center/account.'
+						]);
+					}
+					throw $e;
+				}
 				break;
 			}
 
@@ -148,5 +163,21 @@ try {
 		'result'  => $result
 	]);
 } catch (Throwable $e) {
-	respond(500, ['success' => false, 'error' => $e->getMessage()]);
+	$code = (int)$e->getCode();
+	$msg  = $e->getMessage();
+
+	if ($code === 404 || strpos($msg, '(404)') !== false) {
+		respond(404, [
+			'success' => false,
+			'error'   => 'not_found',
+			'message' => $msg
+		]);
+	}
+
+	respond(500, [
+		'success' => false,
+		'error'   => 'mailchimp_api_error',
+		'message' => $msg,
+		'code'    => $code ?: 500
+	]);
 }
