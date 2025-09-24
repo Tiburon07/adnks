@@ -54,8 +54,7 @@ try {
 		'getAllLists',
 		'ping',
 		'debugConfig',
-		'getAllLists',
-		'getListSettings',
+		'getAllLists'
 
 	];
 

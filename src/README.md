@@ -2,16 +2,14 @@
 Front‑controller PHP per gestione iscrizioni eventi + integrazione Mailchimp (double opt‑in).
 
 > **Entry point**: `index.php` · **Runtime**: Apache + PHP‑FPM · **DB**: MariaDB (PDO)
->  
+  
 > Questa API usa `index.php` come *single entry point* (front controller) per tutte le rotte. Gli endpoint storici (`event_registration.php`, `event_list_checkin.php`, ecc.) restano operativi e vengono inclusi dal router per massima retro‑compatibilità.
 
----
 
 ## 1) Panoramica
-- **Obiettivo**: raccogliere iscrizioni ad eventi, salvarle in MariaDB, attivare **Mailchimp double opt‑in**, gestire check‑in e ruoli in presenza.
 - **Tecnologie**: PHP 8+, PDO, Apache, MariaDB, Mailchimp Marketing API.
-- **Pattern**: Front Controller con **routing** a path REST‑like.
-- **Formato dati**: JSON (UTF‑8). Date/ore in ISO‑8601 (`YYYY-MM-DDTHH:mm`). Timezone predefinita: **Europe/Rome**.
+- **Pattern**: Front Controller con **routing** (REST‑like).
+- **Formato dati**: JSON (UTF‑8). Date/ore in ISO‑8601 (`YYYY-MM-DDTHH:mm`).
 
 ---
 
@@ -103,6 +101,7 @@ Body:
   "ruolo": "Marketing",
   "checkin": "NA"
 }
+
 ```
 **Risposte tipiche**
 - `200 OK` → `{"success":true,"message":"Iscrizione ricevuta. Controlla l’email per confermare.","idIscrizione": 987}`
