@@ -245,7 +245,6 @@ function createOrGetUser($pdo, $data)
 function verificaIscrizioneEsistente($pdo, $evento_id, $utente_id)
 {
 	$sql = "SELECT ID FROM Iscrizione_Eventi WHERE idEvento = :evento_id AND idUtente = :utente_id AND status != 'cancelled'";
-
 	try {
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute([
@@ -266,13 +265,13 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 {
 	// Determina il tipo di checkin in base al tipo di evento
 	$checkin = ($evento_tipo === 'virtuale') ? 'virtuale' : 'NA';
-	$status = checkEventSubscription($utente_id, $evento_id);
+	$status = checkEventSubscription($utente_id, $evento_id, $pdo);
 
 	if ($status === 'confirmed' || $status === 'pending') {
 		throw new Exception("Sei già iscritto a questo evento.");
 	}
-
-	if ($status === 'canceled') {
+	error_log("Loading status for user" . $status);
+	if ($status === 'cancelled') {
 		$sql = "REPLACE INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
 						VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
 	} else {
@@ -549,15 +548,16 @@ try {
 }
 
 
-function checkEventSubscription($userId, $eventId)
+function checkEventSubscription($userId, $eventId, $db = null)
 {
 	// FN CALL : checkEventSubscription($utente_id, $evento_id);
-
-	$db = getDB();
+	error_log(print_r($db), true);
+	error_log("userid: " . $userId, " eventid: " . $eventId);
 	$stmt = $db->prepare("SELECT `status` FROM Iscrizione_Eventi WHERE idUtente = ? AND idEvento = ?");
 	$stmt->execute([$userId, $eventId]);
 
 	if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		error_log("Found status: " . $row['status']);
 		if (in_array($row['status'], ['confirmed', 'pending'])) {
 			return $row['status']; // Iscritto
 		}
