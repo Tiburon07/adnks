@@ -55,7 +55,6 @@ try {
 		'ping',
 		'debugConfig',
 		'getAllLists'
-
 	];
 
 	$call = $_GET['call'] ?? 'getAllMembers';

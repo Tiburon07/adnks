@@ -505,24 +505,6 @@ class MailchimpService
 		}
 	}
 
-	/**
-	 * Controlla l'attività recente di un membro
-	 */
-	/* 	public function getMemberActivity($email, $count = 10)
-	{
-		try {
-			$subscriberHash = $this->getEmailHash($email);
-			$endpoint = "lists/{$this->listId}/members/{$subscriberHash}/activity";
-
-			$params = ['count' => $count];
-			$response = $this->makeApiCall('GET', $endpoint, $params);
-
-			return $response['activity'] ?? [];
-		} catch (Exception $e) {
-			error_log("Errore getMemberActivity per {$email}: " . $e->getMessage());
-			return [];
-		}
-	} */
 
 	public function getMemberActivity(string $email, int $count = 10): array
 	{
