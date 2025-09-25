@@ -266,11 +266,23 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 {
 	// Determina il tipo di checkin in base al tipo di evento
 	$checkin = ($evento_tipo === 'virtuale') ? 'virtuale' : 'NA';
+	$status = checkEventSubscription($utente_id, $evento_id);
 
-	$sql = "INSERT INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
-            VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+	if ($status === 'confirmed' || $status === 'pending') {
+		throw new Exception("Sei già iscritto a questo evento.");
+	}
+
+	if ($status === 'canceled') {
+		$sql = "REPLACE INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
+						VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+	} else {
+		$sql = "INSERT INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
+						VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+	}
+
 
 	try {
+		error_log("Salvataggio iscrizione per utente {$utente_id} all'evento {$evento_id}");
 		$stmt = $pdo->prepare($sql);
 		$params = [
 			':evento_id' => (int)$evento_id,
@@ -534,4 +546,21 @@ try {
 	} else {
 		sendTraditionalResponse(false, $errorMessage, $formData ?? null);
 	}
+}
+
+
+function checkEventSubscription($userId, $eventId)
+{
+	// FN CALL : checkEventSubscription($utente_id, $evento_id);
+
+	$db = getDB();
+	$stmt = $db->prepare("SELECT `status` FROM Iscrizione_Eventi WHERE idUtente = ? AND idEvento = ?");
+	$stmt->execute([$userId, $eventId]);
+
+	if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		if (in_array($row['status'], ['confirmed', 'pending'])) {
+			return $row['status']; // Iscritto
+		}
+	}
+	return false; // generic return
 }
