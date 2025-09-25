@@ -272,8 +272,13 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 	}
 	error_log("Loading status for user" . $status);
 	if ($status === 'cancelled') {
-		$sql = "REPLACE INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
-						VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+		$sql = "UPDATE Iscrizione_Eventi
+						SET dataIscrizione = CURRENT_TIMESTAMP,
+							checkin = :checkin,
+							status = 'pending',
+							mailchimp_status = 'pending',
+							updatedAt = CURRENT_TIMESTAMP
+						WHERE idUtente = :id_utente AND idEvento = :evento_id";
 	} else {
 		$sql = "INSERT INTO Iscrizione_Eventi (idUtente, idEvento, dataIscrizione, checkin, status, mailchimp_status, createdAt, updatedAt)
 						VALUES (:id_utente, :evento_id, CURRENT_TIMESTAMP, :checkin, 'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
@@ -302,27 +307,43 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 			$exists = $mailchimp->getSubscriber($userData['email']);
 
 			if (!$exists['success']) {
-				error_log('no success available');
+				// Errore nella verifica dell'esistenza
 				throw new Exception("Errore verifica esistenza utente Mailchimp: " . $exists['error']);
 			} else {
 				if ($exists && $exists['success'] && $exists['status'] === 'subscribed') {
-					error_log('Utente già iscritto, bisogna riabilitarlo');
 					// Utente già iscritto, bisogna riabilitarlo
 					$reactivateResult = $mailchimp->resubscribeMember($userData['email']);
 					if (!$reactivateResult['success']) {
 						throw new Exception("Errore riabilitazione utente Mailchimp: " . $reactivateResult['error']);
 					}
 				} elseif ($exists && $exists['success'] && in_array($exists['status'], ['pending', 'unsubscribed', 'cleaned'])) {
-					error_log('Utente esistente ma non confermato o disiscritto, reinvia email di conferma');
+					// Utente esistente ma non confermato o disiscritto, gestisci reiscrizione
+					$mergeFields = [
+						'FNAME' => $userData['nome'],
+						'LNAME' => $userData['cognome'],
+						'COMPANY' => $userData['azienda']
+					];
 
-					// Utente esistente ma non confermato o disiscritto, reinvia l'email di conferma
-					$resendResult = $mailchimp->resendConfirmationEmail($userData['email']);
+					$resendResult = $mailchimp->resubscribeMember(
+						$userData['email'],
+						$mergeFields,
+						true // Forza pending per utenti unsubscribed
+					);
 
 					if ($resendResult['success']) {
 						$mailchimpSuccess = true;
-						$mailchimpMessage = "Email di conferma reinviata con successo.";
+						if ($resendResult['confirmation_sent']) {
+							$mailchimpMessage = "Email di conferma inviata. Verifica la tua casella email.";
+						} else {
+							$mailchimpMessage = "Reiscrizione completata con successo.";
+						}
 					} else {
-						throw new Exception("Errore reinvio email di conferma: " . $resendResult['error']);
+						if ($resendResult['error'] === 'compliance_state') {
+							$mailchimpMessage = "Devi reiscriverti volontariamente tramite il form di iscrizione.";
+							error_log("Utente in compliance state: " . $userData['email']);
+						} else {
+							throw new Exception("Errore reiscrizione: " . $resendResult['message']);
+						}
 					}
 				} else {
 					error_log('Nuovo utente, default subscription');
@@ -551,16 +572,14 @@ try {
 function checkEventSubscription($userId, $eventId, $db = null)
 {
 	// FN CALL : checkEventSubscription($utente_id, $evento_id);
-	error_log(print_r($db), true);
-	error_log("userid: " . $userId, " eventid: " . $eventId);
+
+
 	$stmt = $db->prepare("SELECT `status` FROM Iscrizione_Eventi WHERE idUtente = ? AND idEvento = ?");
 	$stmt->execute([$userId, $eventId]);
 
 	if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-		error_log("Found status: " . $row['status']);
-		if (in_array($row['status'], ['confirmed', 'pending'])) {
-			return $row['status']; // Iscritto
-		}
+		return $row['status']; // Iscritto
 	}
-	return false; // generic return
+
+	throw new Exception("status not found");
 }

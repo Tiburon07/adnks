@@ -564,31 +564,59 @@ class MailchimpService
 
 	/**
 	 * Re-iscrive un membro che era stato rimosso/unsubscribed
+	 * Gestisce correttamente gli utenti disiscritti secondo le linee guida MailChimp
 	 */
-	public function resubscribeMember($email, $mergeFields = [])
+	public function resubscribeMember($email, $mergeFields = [], $forcePending = false)
 	{
 		try {
 			$subscriberHash = $this->getEmailHash($email);
 			$endpoint = "lists/{$this->listId}/members/{$subscriberHash}";
 
+			// Prima verifica lo stato attuale del membro
+			$currentStatus = $this->checkEmailStatus($email);
+
+			// Se l'utente è in compliance state o unsubscribed, usa pending per rispettare GDPR
+			$targetStatus = 'subscribed';
+			if (
+				$forcePending ||
+				(isset($currentStatus['status']) && $currentStatus['status'] === 'unsubscribed')
+			) {
+				$targetStatus = 'pending'; // Invia email di conferma
+			}
+
 			$data = [
-				'email_address' => $email,
-				'status' => 'subscribed', // Forza lo stato a subscribed
+				'email_address' => strtolower($email),
+				'status' => $targetStatus,
 				'merge_fields' => $mergeFields
 			];
 
-			$response = $this->makeRequest('PATCH', $endpoint, [], $data);
+			// Usa PUT per upsert invece di PATCH per maggiore affidabilità
+			$response = $this->makeApiCall($endpoint, 'PUT', $data);
 
 			return [
 				'success' => true,
 				'status' => $response['status'],
-				'id' => $response['id']
+				'id' => $response['id'],
+				'previous_status' => $currentStatus['status'] ?? 'unknown',
+				'confirmation_sent' => $targetStatus === 'pending'
 			];
 		} catch (Exception $e) {
-			error_log("Errore resubscribeMember per {$email}: " . $e->getMessage());
+			$errorMessage = $e->getMessage();
+			error_log("Errore resubscribeMember per {$email}: " . $errorMessage);
+
+			// Gestisci errori specifici di compliance
+			if (strpos($errorMessage, 'compliance') !== false) {
+				return [
+					'success' => false,
+					'error' => 'compliance_state',
+					'message' => 'Utente in stato di compliance. Deve reiscriversi volontariamente.'
+				];
+			}
+
 			return [
 				'success' => false,
-				'error' => $e->getMessage()
+				'error' => $errorMessage,
+				'message' => 'Errore durante la re-iscrizione'
 			];
 		}
 	}
