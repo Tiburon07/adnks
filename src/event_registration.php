@@ -291,15 +291,19 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 			$exists = $mailchimp->getSubscriber($userData['email']);
 
 			if (!$exists['success']) {
+				error_log('no success available');
 				throw new Exception("Errore verifica esistenza utente Mailchimp: " . $exists['error']);
 			} else {
 				if ($exists && $exists['success'] && $exists['status'] === 'subscribed') {
+					error_log('Utente già iscritto, bisogna riabilitarlo');
 					// Utente già iscritto, bisogna riabilitarlo
 					$reactivateResult = $mailchimp->resubscribeMember($userData['email']);
 					if (!$reactivateResult['success']) {
 						throw new Exception("Errore riabilitazione utente Mailchimp: " . $reactivateResult['error']);
 					}
 				} elseif ($exists && $exists['success'] && in_array($exists['status'], ['pending', 'unsubscribed', 'cleaned'])) {
+					error_log('Utente esistente ma non confermato o disiscritto, reinvia email di conferma');
+
 					// Utente esistente ma non confermato o disiscritto, reinvia l'email di conferma
 					$resendResult = $mailchimp->resendConfirmationEmail($userData['email']);
 
@@ -310,6 +314,7 @@ function saveIscrizione($pdo, $evento_id, $utente_id, $evento_tipo, $evento, $us
 						throw new Exception("Errore reinvio email di conferma: " . $resendResult['error']);
 					}
 				} else {
+					error_log('Nuovo utente, default subscription');
 					$mailchimpResult = $mailchimp->addSubscriber(
 						$userData['email'],
 						$userData['nome'],
