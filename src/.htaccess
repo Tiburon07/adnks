@@ -3,6 +3,9 @@
 
 RewriteEngine On
 
+# Passa l'Authorization a PHP -> va configurata su nginx/apache
+# SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
 # Non toccare file/dir esistenti
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

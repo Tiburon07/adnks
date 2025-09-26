@@ -545,6 +545,28 @@ $routes = [
 $reqMethod = method();
 $reqPath = path();
 
+require_once __DIR__ . '/lib/auth.php';
+
+// Definisci quali percorsi NON richiedono Bearer
+/**
+ * Si protegge automaticamente:
+ *	POST /event-registration
+ *  GET /events/{id}/checkins
+ *	POST|PUT|PATCH /event-checkin-update
+ *	POST /events (creazione evento)
+ * e si lascia pubblico GET|POST /mailchimp/webhook e GET /. --> verificare se è cosa..
+ */
+$public = false
+	|| $reqMethod === 'OPTIONS'           // preflight
+	|| ($reqMethod === 'GET' && $reqPath === '/') // landing/health
+	|| preg_match('#^/mailchimp/webhook$#', $reqPath) // webhook Mailchimp (niente Authorization)
+;
+
+// In tutti gli altri casi, richiedi il Bearer
+if (!$public) {
+	requireBearerSingleToken();
+}
+
 foreach ($routes as [$m, $regex, $handler]) {
 	if ($reqMethod === $m && preg_match($regex, $reqPath, $matches)) {
 		array_shift($matches);
